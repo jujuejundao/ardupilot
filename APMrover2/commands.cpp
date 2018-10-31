@@ -4,7 +4,7 @@
 void Rover::update_home_from_EKF()
 {
     // exit immediately if home already set
-    if (ahrs.home_is_set()) {
+    if (home_is_set != HOME_UNSET) {
         return;
     }
 
@@ -17,13 +17,8 @@ bool Rover::set_home_to_current_location(bool lock)
 {
     // use position from EKF if available otherwise use GPS
     Location temp_loc;
-    if (ahrs.have_inertial_nav() && ahrs.get_position(temp_loc)) {
-        if (!set_home(temp_loc, lock)) {
-            return false;
-        }
-        // we have successfully set AHRS home, set it for SmartRTL
-        g2.smart_rtl.set_home(true);
-        return true;
+    if (ahrs.get_position(temp_loc)) {
+        return set_home(temp_loc, lock);
     }
     return false;
 }
@@ -40,18 +35,20 @@ bool Rover::set_home(const Location& loc, bool lock)
         return false;
     }
 
-    // check if EKF origin has been set
+    // set EKF origin to home if it hasn't been set yet
     Location ekf_origin;
     if (!ahrs.get_origin(ekf_origin)) {
-        return false;
+        ahrs.set_origin(loc);
     }
-
-    const bool home_was_set = ahrs.home_is_set();
 
     // set ahrs home
     ahrs.set_home(loc);
 
-    if (!home_was_set) {
+    // init compass declination
+    if (home_is_set == HOME_UNSET) {
+        // record home is set
+        home_is_set = HOME_SET_NOT_LOCKED;
+
         // log new home position which mission library will pull from ahrs
         if (should_log(MASK_LOG_CMD)) {
             AP_Mission::Mission_Command temp_cmd;
@@ -63,11 +60,17 @@ bool Rover::set_home(const Location& loc, bool lock)
 
     // lock home position
     if (lock) {
-        ahrs.lock_home();
+        home_is_set = HOME_SET_AND_LOCKED;
     }
 
     // Save Home to EEPROM
     mission.write_home_to_storage();
+
+    // log ahrs home and ekf origin dataflash
+    Log_Write_Home_And_Origin();
+
+    // send new home location to GCS
+    gcs().send_home(loc);
 
     // send text of home position to ground stations
     gcs().send_text(MAV_SEVERITY_INFO, "Set HOME to %.6f %.6f at %.2fm",
@@ -79,6 +82,28 @@ bool Rover::set_home(const Location& loc, bool lock)
     return true;
 }
 
+// checks if we should update ahrs/RTL home position from GPS
+void Rover::set_system_time_from_GPS()
+{
+    // exit immediately if system time already set
+    if (system_time_set) {
+        return;
+    }
+
+    // if we have a 3d lock and valid location
+    if (gps.status() >= AP_GPS::GPS_OK_FIX_3D) {
+        // set system clock for log timestamps
+        const uint64_t gps_timestamp = gps.time_epoch_usec();
+
+        hal.util->set_system_clock(gps_timestamp);
+
+        // update signing timestamp
+        GCS_MAVLINK::update_signing_timestamp(gps_timestamp);
+
+        system_time_set = true;
+    }
+}
+
 /*
   update home location from GPS
   this is called as long as we have 3D lock and the arming switch is
@@ -86,11 +111,13 @@ bool Rover::set_home(const Location& loc, bool lock)
 */
 void Rover::update_home()
 {
-    if (!ahrs.home_is_locked()) {
+    if (home_is_set == HOME_SET_NOT_LOCKED) {
         Location loc;
         if (ahrs.get_position(loc)) {
             if (get_distance(loc, ahrs.get_home()) > DISTANCE_HOME_MAX) {
                 ahrs.set_home(loc);
+                Log_Write_Home_And_Origin();
+                gcs().send_home(gps.location());
             }
         }
     }

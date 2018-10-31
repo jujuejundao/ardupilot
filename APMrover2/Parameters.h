@@ -2,10 +2,6 @@
 
 #include <AP_Common/AP_Common.h>
 
-#include "RC_Channel.h"
-#include "AC_Sprayer/AC_Sprayer.h"
-#include "AP_Rally.h"
-
 // Global parameter class.
 //
 class Parameters {
@@ -19,12 +15,13 @@ public:
     // by newer code.
     //
     static const uint16_t k_format_version = 16;
+    static const uint16_t k_software_type = 20;
 
     enum {
         // Layout version number, always key zero.
         //
         k_param_format_version = 0,
-        k_param_software_type, // unused
+        k_param_software_type,
         k_param_BoardConfig_CAN,
 
         // Misc
@@ -37,8 +34,8 @@ public:
         k_param_relay,
         k_param_BoardConfig,
         k_param_pivot_turn_angle,
-        k_param_rc_13_old,  // unused
-        k_param_rc_14_old,  // unused
+        k_param_rc_13_old,
+        k_param_rc_14_old,
 
         // IO pins
         k_param_rssi_pin = 20,  // unused, replaced by rssi_ library parameters
@@ -68,15 +65,15 @@ public:
         k_param_gcs1,               // stream rates for uartC
         k_param_sysid_this_mav,
         k_param_sysid_my_gcs,
-        k_param_serial0_baud_old,   // unused
-        k_param_serial1_baud_old,   // unused
+        k_param_serial0_baud_old,
+        k_param_serial1_baud_old,
         k_param_telem_delay,
         k_param_skip_gyro_cal,      // unused
         k_param_gcs2,               // stream rates for uartD
-        k_param_serial2_baud_old,   // unused
+        k_param_serial2_baud_old,
         k_param_serial2_protocol,   // deprecated, can be deleted
         k_param_serial_manager,     // serial manager library
-        k_param_cli_enabled_old,    // unused
+        k_param_cli_enabled_old,
         k_param_gcs3,
         k_param_gcs_pid_mask,
 
@@ -103,10 +100,10 @@ public:
         //
         // 150: Navigation parameters
         //
-        k_param_crosstrack_gain = 150,  // unused
-        k_param_crosstrack_entry_angle, // unused
+        k_param_crosstrack_gain = 150,
+        k_param_crosstrack_entry_angle,
         k_param_speed_cruise,
-        k_param_speed_turn_gain,    // unused
+        k_param_speed_turn_gain,
         k_param_speed_turn_dist,    // unused
         k_param_ch7_option,
         k_param_auto_trigger_pin,
@@ -117,14 +114,14 @@ public:
         //
         // 160: Radio settings
         //
-        k_param_rc_1_old = 160, // unused
-        k_param_rc_2_old,       // unused
-        k_param_rc_3_old,       // unused
-        k_param_rc_4_old,       // unused
-        k_param_rc_5_old,       // unused
-        k_param_rc_6_old,       // unused
-        k_param_rc_7_old,       // unused
-        k_param_rc_8_old,       // unused
+        k_param_rc_1_old = 160,
+        k_param_rc_2_old,
+        k_param_rc_3_old,
+        k_param_rc_4_old,
+        k_param_rc_5_old,
+        k_param_rc_6_old,
+        k_param_rc_7_old,
+        k_param_rc_8_old,
 
         // throttle control
         k_param_throttle_min_old = 170, // unused
@@ -132,7 +129,7 @@ public:
         k_param_throttle_cruise,
         k_param_throttle_slewrate_old,  // unused
         k_param_throttle_reduction,     // unused
-        k_param_pilot_steer_type,
+        k_param_skid_steer_in,
         k_param_skid_steer_out_old, // unused
 
         // failsafe control
@@ -163,7 +160,7 @@ public:
         k_param_mode4,
         k_param_mode5,
         k_param_mode6,
-        k_param_aux_channel_old,
+        k_param_aux_channel,
 
         //
         // 220: Waypoint data
@@ -187,10 +184,10 @@ public:
         k_param_pidSpeedThrottle_old,   // unused
 
         // high RC channels
-        k_param_rc_9_old = 235, // unused
-        k_param_rc_10_old,      // unused
-        k_param_rc_11_old,      // unused
-        k_param_rc_12_old,      // unusedS
+        k_param_rc_9_old = 235,
+        k_param_rc_10_old,
+        k_param_rc_11_old,
+        k_param_rc_12_old,
 
         // other objects
         k_param_sitl = 240,
@@ -203,7 +200,6 @@ public:
         k_param_barometer,
         k_param_notify,
         k_param_button,
-        k_param_osd,
 
         k_param_DataFlash = 253,  // Logging Group
 
@@ -211,6 +207,7 @@ public:
         };
 
     AP_Int16    format_version;
+    AP_Int8     software_type;
 
     // Misc
     //
@@ -230,6 +227,7 @@ public:
     // navigation parameters
     //
     AP_Float    speed_cruise;
+    AP_Int8     speed_turn_gain;
     AP_Int8     ch7_option;
     AP_Int8     auto_trigger_pin;
     AP_Float    auto_kickstart;
@@ -240,7 +238,7 @@ public:
     // Throttle
     //
     AP_Int8     throttle_cruise;
-    AP_Int8     pilot_steer_type;
+    AP_Int8     skid_steer_in;
 
     // failsafe control
     AP_Int8     fs_action;
@@ -250,7 +248,7 @@ public:
     AP_Int8     fs_gcs_enabled;
     AP_Int8     fs_crash_check;
 
-    // obstacle avoidance control
+    // obstacle control
     AP_Int16    rangefinder_trigger_cm;
     AP_Float    rangefinder_turn_angle;
     AP_Float    rangefinder_turn_time;
@@ -266,6 +264,7 @@ public:
     AP_Int8     mode4;
     AP_Int8     mode5;
     AP_Int8     mode6;
+    AP_Int8     aux_channel;
 
     // Waypoints
     //
@@ -285,16 +284,14 @@ public:
     // var_info for holding Parameter information
     static const struct AP_Param::GroupInfo var_info[];
 
-#if STATS_ENABLED == ENABLED
     // vehicle statistics
     AP_Stats stats;
-#endif
 
     // whether to enforce acceptance of packets only from sysid_my_gcs
     AP_Int8 sysid_enforce;
 
     // RC input channels
-    RC_Channels_Rover rc_channels;
+    RC_Channels rc_channels;
 
     // control over servo output ranges
     SRV_Channels servo_channels;
@@ -303,7 +300,6 @@ public:
     // advanced failsafe library
     AP_AdvancedFailsafe_Rover afs;
 #endif
-
     AP_Beacon beacon;
 
     // Visual Odometry camera
@@ -314,72 +310,12 @@ public:
 
     // wheel encoders
     AP_WheelEncoder wheel_encoder;
-    AP_WheelRateControl wheel_rate_control;
 
     // steering and throttle controller
     AR_AttitudeControl attitude_control;
 
     // turn radius of vehicle (only used in steering mode)
     AP_Float turn_radius;
-
-    // acro mode turn rate maximum
-    AP_Float acro_turn_rate;
-
-    // Safe RTL library
-    AP_SmartRTL smart_rtl;
-
-    // default speeds for auto, rtl
-    AP_Float wp_speed;
-    AP_Float rtl_speed;
-
-    // frame class for vehicle
-    AP_Int8 frame_class;
-
-    // fence library
-    AC_Fence fence;
-
-    // proximity library
-    AP_Proximity proximity;
-
-    // avoidance library
-    AC_Avoid avoid;
-
-    // pivot turn rate
-    AP_Int16 pivot_turn_rate;
-
-    // pitch angle at 100% throttle
-    AP_Float bal_pitch_max;
-
-    // pitch/roll angle for crash check
-    AP_Int8 crash_angle;
-
-    // follow mode library
-    AP_Follow follow;
-
-    // frame type for vehicle (used for vectored motor vehicles and custom motor configs)
-    AP_Int8 frame_type;
-
-    // loiter type
-    AP_Int8 loit_type;
-    AP_Float loit_radius;
-
-    // Sprayer
-    AC_Sprayer sprayer;
-
-    // Rally point library
-    AP_Rally_Rover rally;
-
-    // Simple mode types
-    AP_Int8 simple_type;
-
-    // sailboat parameters
-    AP_Float sail_angle_min;
-    AP_Float sail_angle_max;
-    AP_Float sail_angle_ideal;
-    AP_Float sail_heel_angle_max;
-
-    // windvane
-    AP_WindVane windvane;
 };
 
 extern const AP_Param::Info var_info[];

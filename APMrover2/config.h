@@ -42,13 +42,24 @@
   #define HIL_MODE HIL_MODE_DISABLED
 #endif
 
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+  #define BATTERY_PIN_1     1
+  #define CURRENT_PIN_1     2
+#elif CONFIG_HAL_BOARD == HAL_BOARD_PX4
+  #define BATTERY_PIN_1    -1
+  #define CURRENT_PIN_1    -1
+#elif CONFIG_HAL_BOARD == HAL_BOARD_LINUX
+  #define BATTERY_PIN_1    -1
+  #define CURRENT_PIN_1    -1
+#elif CONFIG_HAL_BOARD == HAL_BOARD_VRBRAIN
+  #define BATTERY_PIN_1    -1
+  #define CURRENT_PIN_1    -1
+#endif
+
 #ifndef MAV_SYSTEM_ID
   #define MAV_SYSTEM_ID    1
 #endif
 
-#ifndef ARM_DELAY_MS
-  #define ARM_DELAY_MS  2000
-#endif
 
 //////////////////////////////////////////////////////////////////////////////
 // FrSky telemetry support
@@ -82,13 +93,6 @@
   #error XXX
 #endif
 
-
-//////////////////////////////////////////////////////////////////////////////
-//  VISUAL ODOMETRY
-#ifndef VISUAL_ODOMETRY_ENABLED
-# define VISUAL_ODOMETRY_ENABLED ENABLED
-#endif
-
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 // STARTUP BEHAVIOUR
@@ -117,13 +121,6 @@
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
-// RALLY POINTS
-//
-#ifndef AP_RALLY
- #define AP_RALLY ENABLED
-#endif
-
-//////////////////////////////////////////////////////////////////////////////
 // NAVL1
 //
 #ifndef NAVL1
@@ -131,10 +128,14 @@
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
-// CRUISE_SPEED default
+// AIRSPEED_CRUISE
 //
-#ifndef CRUISE_SPEED
-  #define CRUISE_SPEED    2  // in m/s
+#ifndef SPEED_CRUISE
+  #define SPEED_CRUISE    5  // in m/s
+#endif
+
+#ifndef TURN_GAIN
+  #define TURN_GAIN       5
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
@@ -162,20 +163,3 @@
 #ifndef ADVANCED_FAILSAFE
   #define ADVANCED_FAILSAFE DISABLED
 #endif
-
-#ifndef STATS_ENABLED
- # define STATS_ENABLED ENABLED
-#endif
-
-#ifndef DEVO_TELEM_ENABLED
-#if HAL_MINIMIZE_FEATURES
- #define DEVO_TELEM_ENABLED DISABLED
-#else
- #define DEVO_TELEM_ENABLED ENABLED
-#endif
-#endif
-
-#ifndef OSD_ENABLED
- #define OSD_ENABLED DISABLED
-#endif
-

@@ -1,12 +1,6 @@
 #include "mode.h"
 #include "Rover.h"
 
-// constructor
-ModeAuto::ModeAuto(ModeRTL& mode_rtl) :
-    _mode_rtl(mode_rtl)
-{
-}
-
 bool ModeAuto::_enter()
 {
     // fail to enter auto if no mission commands
@@ -15,14 +9,15 @@ bool ModeAuto::_enter()
         return false;
     }
 
-    // initialise waypoint speed
-    set_desired_speed_to_default();
-
     // init location target
     set_desired_location(rover.current_loc);
 
     // other initialisation
     auto_triggered = false;
+    g2.motors.slew_limit_throttle(true);
+
+    // initialise reversed to be false
+    set_reversed(false);
 
     // restart mission processing
     mission.start_or_resume();
@@ -43,20 +38,24 @@ void ModeAuto::update()
         case Auto_WP:
         {
             _distance_to_destination = get_distance(rover.current_loc, _destination);
-            const bool near_wp = _distance_to_destination <= rover.g.waypoint_radius;
             // check if we've reached the destination
-            if (!_reached_destination && (near_wp || location_passed_point(rover.current_loc, _origin, _destination))) {
-                // trigger reached
-                _reached_destination = true;
+            if (!_reached_destination) {
+                if (_distance_to_destination <= rover.g.waypoint_radius || location_passed_point(rover.current_loc, _origin, _destination)) {
+                    // trigger reached
+                    _reached_destination = true;
+                }
             }
-            // determine if we should keep navigating
-            if (!_reached_destination || (rover.is_boat() && !near_wp)) {
+            // stay active at destination if caller requested this behaviour and outside the waypoint radius
+            bool active_at_destination = _reached_destination && _stay_active_at_dest && (_distance_to_destination > rover.g.waypoint_radius);
+            if (!_reached_destination || active_at_destination) {
                 // continue driving towards destination
-                calc_steering_to_waypoint(_reached_destination ? rover.current_loc : _origin, _destination, _reversed);
-                calc_throttle(calc_reduced_speed_for_turn_or_distance(_reversed ? -_desired_speed : _desired_speed), true, false);
+                calc_lateral_acceleration(active_at_destination ? rover.current_loc : _origin, _destination, _reversed);
+                calc_nav_steer(_reversed);
+                calc_throttle(calc_reduced_speed_for_turn_or_distance(_reversed ? -_desired_speed : _desired_speed), true);
             } else {
                 // we have reached the destination so stop
                 stop_vehicle();
+                lateral_acceleration = 0.0f;
             }
             break;
         }
@@ -65,38 +64,28 @@ void ModeAuto::update()
         {
             if (!_reached_heading) {
                 // run steering and throttle controllers
-                calc_steering_to_heading(_desired_yaw_cd);
-                calc_throttle(_desired_speed, true, false);
-                // check if we have reached within 5 degrees of target
-                _reached_heading = (fabsf(_desired_yaw_cd - ahrs.yaw_sensor) < 500);
+                const float yaw_error = wrap_PI(radians((_desired_yaw_cd - ahrs.yaw_sensor) * 0.01f));
+                const float steering_out = attitude_control.get_steering_out_angle_error(yaw_error, g2.motors.have_skid_steering(), g2.motors.limit.steer_left, g2.motors.limit.steer_right);
+                g2.motors.set_steering(steering_out * 4500.0f);
+                calc_throttle(_desired_speed, true);
+                // check if we have reached target
+                _reached_heading = (fabsf(yaw_error) < radians(5));
             } else {
                 stop_vehicle();
             }
             break;
         }
-
-        case Auto_RTL:
-            _mode_rtl.update();
-            break;
     }
-}
-
-// return distance (in meters) to destination
-float ModeAuto::get_distance_to_destination() const
-{
-    if (_submode == Auto_RTL) {
-        return _mode_rtl.get_distance_to_destination();
-    }
-    return _distance_to_destination;
 }
 
 // set desired location to drive to
-void ModeAuto::set_desired_location(const struct Location& destination, float next_leg_bearing_cd)
+void ModeAuto::set_desired_location(const struct Location& destination, float next_leg_bearing_cd, bool stay_active_at_dest)
 {
     // call parent
     Mode::set_desired_location(destination, next_leg_bearing_cd);
 
     _submode = Auto_WP;
+    _stay_active_at_dest = stay_active_at_dest;
 }
 
 // return true if vehicle has reached or even passed destination
@@ -104,9 +93,6 @@ bool ModeAuto::reached_destination()
 {
     if (_submode == Auto_WP) {
         return _reached_destination;
-    }
-    if (_submode == Auto_RTL) {
-        return _mode_rtl.reached_destination();
     }
     // we should never reach here but just in case, return true to allow missions to continue
     return true;
@@ -132,11 +118,12 @@ bool ModeAuto::reached_heading()
     return true;
 }
 
-// start RTL (within auto)
-void ModeAuto::start_RTL()
+// execute the mission in reverse (i.e. backing up)
+void ModeAuto::set_reversed(bool value)
 {
-    if (_mode_rtl.enter()) {
-        _submode = Auto_RTL;
+    if (_reversed != value) {
+        _reversed = value;
+        rover.set_reverse(_reversed);
     }
 }
 
@@ -185,12 +172,12 @@ bool ModeAuto::check_trigger(void)
     return false;
 }
 
-void ModeAuto::calc_throttle(float target_speed, bool nudge_allowed, bool avoidance_enabled)
+void ModeAuto::calc_throttle(float target_speed, bool nudge_allowed)
 {
     // If not autostarting set the throttle to minimum
     if (!check_trigger()) {
         stop_vehicle();
         return;
     }
-    Mode::calc_throttle(target_speed, nudge_allowed, avoidance_enabled);
+    Mode::calc_throttle(target_speed, nudge_allowed);
 }

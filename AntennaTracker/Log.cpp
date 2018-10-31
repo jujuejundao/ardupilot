@@ -19,6 +19,11 @@ void Tracker::Log_Write_Attitude()
     DataFlash.Log_Write_POS(ahrs);
 }
 
+void Tracker::Log_Write_Baro(void)
+{
+    DataFlash.Log_Write_Baro(barometer);
+}
+
 struct PACKED log_Vehicle_Baro {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -65,20 +70,17 @@ void Tracker::Log_Write_Vehicle_Pos(int32_t lat, int32_t lng, int32_t alt, const
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
 
-// type and unit information can be found in
-// libraries/DataFlash/Logstructure.h; search for "log_Units" for
-// units and "Format characters" for field type information
 const struct LogStructure Tracker::log_structure[] = {
     LOG_COMMON_STRUCTURES,
     {LOG_V_BAR_MSG, sizeof(log_Vehicle_Baro),
-        "VBAR", "Qff", "TimeUS,Press,AltDiff", "sPm", "F00" },
+        "VBAR", "Qff", "TimeUS,Press,AltDiff" },
     {LOG_V_POS_MSG, sizeof(log_Vehicle_Pos),
-        "VPOS", "QLLefff", "TimeUS,Lat,Lng,Alt,VelX,VelY,VelZ", "sddmnnn", "FGGB000" }
+        "VPOS", "QLLefff", "TimeUS,Lat,Lng,Alt,VelX,VelY,VelZ" }
 };
 
 void Tracker::Log_Write_Vehicle_Startup_Messages()
 {
-    DataFlash.Log_Write_Mode(control_mode, MODE_REASON_INITIALISED);
+    DataFlash.Log_Write_Mode(control_mode);
     gps.Write_DataFlash_Log_Startup_messages();
 }
 
@@ -90,10 +92,10 @@ void Tracker::log_init(void)
 #else // LOGGING_ENABLED
 
 void Tracker::Log_Write_Attitude(void) {}
+void Tracker::Log_Write_Baro(void) {}
 
 void Tracker::log_init(void) {}
 void Tracker::Log_Write_Vehicle_Pos(int32_t lat, int32_t lng, int32_t alt, const Vector3f& vel) {}
 void Tracker::Log_Write_Vehicle_Baro(float pressure, float altitude) {}
-void Tracker::Log_Write_Vehicle_Startup_Messages() {}
 
 #endif // LOGGING_ENABLED

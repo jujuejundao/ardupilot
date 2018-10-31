@@ -4,7 +4,7 @@
 void Rover::update_mission(void)
 {
     if (control_mode == &mode_auto) {
-        if (ahrs.home_is_set() && mission.num_commands() > 1) {
+        if (home_is_set != HOME_UNSET && mission.num_commands() > 1) {
             mission.update();
         }
     }
@@ -20,8 +20,7 @@ bool Rover::start_command(const AP_Mission::Mission_Command& cmd)
         DataFlash.Log_Write_Mission_Cmd(mission, cmd);
     }
 
-    gcs().send_text(MAV_SEVERITY_INFO, "Executing %s(ID=%i)",
-                    cmd.type(), cmd.id);
+    gcs().send_text(MAV_SEVERITY_INFO, "Executing command ID #%i", cmd.id);
 
     switch (cmd.id) {
     case MAV_CMD_NAV_WAYPOINT:  // Navigate to Waypoint
@@ -32,9 +31,12 @@ bool Rover::start_command(const AP_Mission::Mission_Command& cmd)
         do_RTL();
         break;
 
-    case MAV_CMD_NAV_LOITER_UNLIM:  // Loiter indefinitely
-    case MAV_CMD_NAV_LOITER_TIME:   // Loiter for specified time
-        do_nav_wp(cmd, true);
+    case MAV_CMD_NAV_LOITER_UNLIM:              // Loiter indefinitely
+        do_loiter_unlimited(cmd);
+        break;
+
+    case MAV_CMD_NAV_LOITER_TIME:
+        do_loiter_time(cmd);
         break;
 
     case MAV_CMD_NAV_SET_YAW_SPEED:
@@ -59,6 +61,41 @@ bool Rover::start_command(const AP_Mission::Mission_Command& cmd)
         do_set_home(cmd);
         break;
 
+    case MAV_CMD_DO_SET_SERVO:
+        ServoRelayEvents.do_set_servo(cmd.content.servo.channel, cmd.content.servo.pwm);
+        break;
+
+    case MAV_CMD_DO_SET_RELAY:
+        ServoRelayEvents.do_set_relay(cmd.content.relay.num, cmd.content.relay.state);
+        break;
+
+    case MAV_CMD_DO_REPEAT_SERVO:
+        ServoRelayEvents.do_repeat_servo(cmd.content.repeat_servo.channel, cmd.content.repeat_servo.pwm,
+                                         cmd.content.repeat_servo.repeat_count, cmd.content.repeat_servo.cycle_time * 1000.0f);
+        break;
+
+    case MAV_CMD_DO_REPEAT_RELAY:
+        ServoRelayEvents.do_repeat_relay(cmd.content.repeat_relay.num, cmd.content.repeat_relay.repeat_count,
+                                         cmd.content.repeat_relay.cycle_time * 1000.0f);
+        break;
+
+#if CAMERA == ENABLED
+    case MAV_CMD_DO_CONTROL_VIDEO:                      // Control on-board camera capturing. |Camera ID (-1 for all)| Transmission: 0: disabled, 1: enabled compressed, 2: enabled raw| Transmission mode: 0: video stream, >0: single images every n seconds (decimal)| Recording: 0: disabled, 1: enabled compressed, 2: enabled raw| Empty| Empty| Empty|
+        break;
+
+    case MAV_CMD_DO_DIGICAM_CONFIGURE:                  // Mission command to configure an on-board camera controller system. |Modes: P, TV, AV, M, Etc| Shutter speed: Divisor number for one second| Aperture: F stop number| ISO number e.g. 80, 100, 200, Etc| Exposure type enumerator| Command Identity| Main engine cut-off time before camera trigger in seconds/10 (0 means no cut-off)|
+        do_digicam_configure(cmd);
+        break;
+
+    case MAV_CMD_DO_DIGICAM_CONTROL:                    // Mission command to control an on-board camera controller system. |Session control e.g. show/hide lens| Zoom's absolute position| Zooming step value to offset zoom from the current position| Focus Locking, Unlocking or Re-locking| Shooting Command| Command Identity| Empty|
+        do_digicam_control(cmd);
+        break;
+
+    case MAV_CMD_DO_SET_CAM_TRIGG_DIST:
+        camera.set_trigger_distance(cmd.content.cam_trigg_dist.meters);
+        break;
+#endif
+
 #if MOUNT == ENABLED
     // Sets the region of interest (ROI) for a sensor set or the
     // vehicle itself. This can then be used by the vehicles control
@@ -80,16 +117,6 @@ bool Rover::start_command(const AP_Mission::Mission_Command& cmd)
 
     case MAV_CMD_DO_SET_REVERSE:
         do_set_reverse(cmd);
-        break;
-
-    case MAV_CMD_DO_FENCE_ENABLE:
-        if (cmd.p1 == 0) {  //disable
-            g2.fence.enable(false);
-            gcs().send_text(MAV_SEVERITY_INFO, "Fence Disabled");
-        } else {  //enable fence
-            g2.fence.enable(true);
-            gcs().send_text(MAV_SEVERITY_INFO, "Fence Enabled");
-        }
         break;
 
     default:
@@ -158,11 +185,16 @@ bool Rover::verify_command(const AP_Mission::Mission_Command& cmd)
     // do commands (always return true)
     case MAV_CMD_DO_CHANGE_SPEED:
     case MAV_CMD_DO_SET_HOME:
+    case MAV_CMD_DO_SET_SERVO:
+    case MAV_CMD_DO_SET_RELAY:
+    case MAV_CMD_DO_REPEAT_SERVO:
+    case MAV_CMD_DO_REPEAT_RELAY:
     case MAV_CMD_DO_CONTROL_VIDEO:
+    case MAV_CMD_DO_DIGICAM_CONFIGURE:
+    case MAV_CMD_DO_DIGICAM_CONTROL:
     case MAV_CMD_DO_SET_CAM_TRIGG_DIST:
     case MAV_CMD_DO_SET_ROI:
     case MAV_CMD_DO_SET_REVERSE:
-    case MAV_CMD_DO_FENCE_ENABLE:
         return true;
 
     default:
@@ -179,11 +211,10 @@ bool Rover::verify_command(const AP_Mission::Mission_Command& cmd)
 
 void Rover::do_RTL(void)
 {
-    // start rtl in auto mode
-    mode_auto.start_RTL();
+    set_mode(mode_rtl, MODE_REASON_MISSION_COMMAND);
 }
 
-void Rover::do_nav_wp(const AP_Mission::Mission_Command& cmd, bool always_stop_at_destination)
+void Rover::do_nav_wp(const AP_Mission::Mission_Command& cmd, bool stay_active_at_dest)
 {
     // just starting so we haven't previously reached the waypoint
     previously_reached_wp = false;
@@ -197,14 +228,27 @@ void Rover::do_nav_wp(const AP_Mission::Mission_Command& cmd, bool always_stop_a
     // get heading to following waypoint (auto mode reduces speed to allow corning without large overshoot)
     // in case of non-zero loiter duration, we provide heading-unknown to signal we should stop at the point
     float next_leg_bearing_cd = MODE_NEXT_HEADING_UNKNOWN;
-    if (!always_stop_at_destination && loiter_duration == 0) {
+    if (loiter_duration == 0) {
         next_leg_bearing_cd = mission.get_next_ground_course_cd(MODE_NEXT_HEADING_UNKNOWN);
     }
 
     // retrieve and sanitize target location
     Location cmdloc = cmd.content.location;
     location_sanitize(current_loc, cmdloc);
-    mode_auto.set_desired_location(cmdloc, next_leg_bearing_cd);
+    mode_auto.set_desired_location(cmdloc, next_leg_bearing_cd, stay_active_at_dest);
+}
+
+void Rover::do_loiter_unlimited(const AP_Mission::Mission_Command& cmd)
+{
+    do_nav_wp(cmd, true);
+}
+
+// do_loiter_time - initiate loitering at a point for a given time period
+// if the vehicle is moved off the loiter point (i.e. a boat in a current)
+// then the vehicle will actively return to the loiter coords.
+void Rover::do_loiter_time(const AP_Mission::Mission_Command& cmd)
+{
+    do_nav_wp(cmd, true);
 }
 
 // do_set_yaw_speed - turn to a specified heading and achieve and given speed
@@ -222,8 +266,7 @@ void Rover::do_nav_set_yaw_speed(const AP_Mission::Mission_Command& cmd)
     }
 
     // set auto target
-    const float speed_max = control_mode->get_speed_default();
-    mode_auto.set_desired_heading_and_speed(desired_heading_cd, constrain_float(cmd.content.set_yaw_speed.speed, -speed_max, speed_max));
+    mode_auto.set_desired_heading_and_speed(desired_heading_cd, constrain_float(cmd.content.set_yaw_speed.speed, -g.speed_cruise, g.speed_cruise));
 }
 
 /********************************************************************************/
@@ -264,7 +307,7 @@ bool Rover::verify_nav_wp(const AP_Mission::Mission_Command& cmd)
 
 bool Rover::verify_RTL()
 {
-    return mode_auto.reached_destination();
+    return mode_rtl.reached_destination();
 }
 
 bool Rover::verify_loiter_unlimited(const AP_Mission::Mission_Command& cmd)
@@ -278,7 +321,7 @@ bool Rover::verify_loiter_time(const AP_Mission::Mission_Command& cmd)
 {
     const bool result = verify_nav_wp(cmd);
     if (result) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "Finished active loiter");
+        gcs().send_text(MAV_SEVERITY_WARNING, "Finished active loiter\n");
     }
     return result;
 }
@@ -333,9 +376,14 @@ bool Rover::verify_within_distance()
 
 void Rover::do_change_speed(const AP_Mission::Mission_Command& cmd)
 {
-    // set speed for active mode
-    if (control_mode->set_desired_speed(cmd.content.speed.target_ms)) {
-        gcs().send_text(MAV_SEVERITY_INFO, "speed: %.1f m/s", static_cast<double>(cmd.content.speed.target_ms));
+    if (cmd.content.speed.target_ms > 0.0f) {
+        g.speed_cruise.set(cmd.content.speed.target_ms);
+        gcs().send_text(MAV_SEVERITY_INFO, "Cruise speed: %.1f m/s", static_cast<double>(g.speed_cruise.get()));
+    }
+
+    if (cmd.content.speed.throttle_pct > 0.0f && cmd.content.speed.throttle_pct <= 100.0f) {
+        g.throttle_cruise.set(cmd.content.speed.throttle_pct);
+        gcs().send_text(MAV_SEVERITY_INFO, "Cruise throttle: %.1f", static_cast<double>(g.throttle_cruise.get()));
     }
 }
 
@@ -348,7 +396,35 @@ void Rover::do_set_home(const AP_Mission::Mission_Command& cmd)
     }
 }
 
+#if CAMERA == ENABLED
+
+// do_digicam_configure Send Digicam Configure message with the camera library
+void Rover::do_digicam_configure(const AP_Mission::Mission_Command& cmd)
+{
+    camera.configure(cmd.content.digicam_configure.shooting_mode,
+                     cmd.content.digicam_configure.shutter_speed,
+                     cmd.content.digicam_configure.aperture,
+                     cmd.content.digicam_configure.ISO,
+                     cmd.content.digicam_configure.exposure_type,
+                     cmd.content.digicam_configure.cmd_id,
+                     cmd.content.digicam_configure.engine_cutoff_time);
+}
+
+// do_digicam_control Send Digicam Control message with the camera library
+void Rover::do_digicam_control(const AP_Mission::Mission_Command& cmd)
+{
+    camera.control(cmd.content.digicam_control.session,
+                   cmd.content.digicam_control.zoom_pos,
+                   cmd.content.digicam_control.zoom_step,
+                   cmd.content.digicam_control.focus_lock,
+                   cmd.content.digicam_control.shooting_cmd,
+                   cmd.content.digicam_control.cmd_id);
+}
+
+#endif
+
 void Rover::do_set_reverse(const AP_Mission::Mission_Command& cmd)
 {
-    control_mode->set_reversed(cmd.p1 == 1);
+    mode_auto.set_reversed(cmd.p1 == 1);
+    set_reverse(cmd.p1 == 1);
 }
