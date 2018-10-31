@@ -1,10 +1,6 @@
 #pragma once
 
-#ifndef FORCE_VERSION_H_INCLUDE
-#error version.h should never be included directly. You probably want to include AP_Common/AP_FWVersion.h
-#endif
-
-#include "ap_version.h"
+#include "AP_Common/AP_FWVersion.h"
 
 #define THISFIRMWARE "ArduSub V3.6-dev"
 

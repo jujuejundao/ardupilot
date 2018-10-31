@@ -9,16 +9,16 @@
  */
 void Plane::set_next_WP(const struct Location &loc)
 {
-    if (auto_state.next_wp_crosstrack) {
-        // copy the current WP into the OldWP slot
-        prev_WP_loc = next_WP_loc;
-        auto_state.crosstrack = true;
-    } else {
+    if (auto_state.next_wp_no_crosstrack) {
         // we should not try to cross-track for this waypoint
         prev_WP_loc = current_loc;
         // use cross-track for the next waypoint
-        auto_state.next_wp_crosstrack = true;
-        auto_state.crosstrack = false;
+        auto_state.next_wp_no_crosstrack = false;
+        auto_state.no_crosstrack = true;
+    } else {
+        // copy the current WP into the OldWP slot
+        prev_WP_loc = next_WP_loc;
+        auto_state.no_crosstrack = false;
     }
 
     // Load the next_WP slot
@@ -91,9 +91,6 @@ void Plane::set_guided_WP(void)
     setup_glide_slope();
     setup_turn_angle();
 
-    // disable crosstrack, head directly to the point
-    auto_state.crosstrack = false;
-
     // reset loiter start time.
     loiter.start_time_ms = 0;
 
@@ -101,6 +98,25 @@ void Plane::set_guided_WP(void)
     auto_state.vtol_loiter = false;
     
     loiter_angle_reset();
+}
+
+// run this at setup on the ground
+// -------------------------------
+void Plane::init_home()
+{
+    gcs().send_text(MAV_SEVERITY_INFO, "Init HOME");
+
+    ahrs.set_home(gps.location());
+    home_is_set = HOME_SET_NOT_LOCKED;
+    Log_Write_Home_And_Origin();
+    gcs().send_home(gps.location());
+
+    // Save Home to EEPROM
+    mission.write_home_to_storage();
+
+    // Save prev loc
+    // -------------
+    next_WP_loc = prev_WP_loc = home;
 }
 
 /*
@@ -119,24 +135,13 @@ void Plane::update_home()
         // significantly
         return;
     }
-    if (ahrs.home_is_set() && !ahrs.home_is_locked()) {
+    if (home_is_set == HOME_SET_NOT_LOCKED) {
         Location loc;
         if(ahrs.get_position(loc)) {
-            plane.set_home(loc);
+            ahrs.set_home(loc);
+            Log_Write_Home_And_Origin();
+            gcs().send_home(loc);
         }
     }
     barometer.update_calibration();
-}
-
-void Plane::set_home_persistently(const Location &loc)
-{
-    set_home(loc);
-
-    // Save Home to EEPROM
-    mission.write_home_to_storage();
-}
-
-void Plane::set_home(const Location &loc)
-{
-    ahrs.set_home(loc);
 }

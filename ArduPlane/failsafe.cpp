@@ -16,15 +16,14 @@
  */
 void Plane::failsafe_check(void)
 {
-    static uint16_t last_ticks;
+    static uint16_t last_mainLoop_count;
     static uint32_t last_timestamp;
     static bool in_failsafe;
     uint32_t tnow = micros();
 
-    const uint16_t ticks = scheduler.ticks();
-    if (ticks != last_ticks) {
+    if (perf.mainLoop_count != last_mainLoop_count) {
         // the main loop is running, all is OK
-        last_ticks = ticks;
+        last_mainLoop_count = perf.mainLoop_count;
         last_timestamp = tnow;
         in_failsafe = false;
         return;
@@ -47,13 +46,13 @@ void Plane::failsafe_check(void)
             afs.heartbeat();
         }
 
-        if (RC_Channels::get_valid_channel_count() < 5) {
+        if (hal.rcin->num_channels() < 5) {
             // we don't have any RC input to pass through
             return;
         }
 
         // pass RC inputs to outputs every 20ms
-        RC_Channels::clear_overrides();
+        hal.rcin->clear_overrides();
 
         int16_t roll = channel_roll->get_control_in_zero_dz();
         int16_t pitch = channel_pitch->get_control_in_zero_dz();

@@ -14,6 +14,7 @@ def build(bld):
             'AP_Arming',
             'AP_Camera',
             'AP_L1_Control',
+            'AP_Menu',
             'AP_Navigation',
             'AP_Parachute',
             'AP_RCMapper',
@@ -25,13 +26,13 @@ def build(bld):
             'AP_Motors',
             'AC_PID',
             'AC_Fence',
+            'AC_Avoidance',
+            'AP_Proximity',
             'AP_Stats',
             'AP_Landing',
             'AP_Beacon',
             'PID',
-            'AP_Soaring',
-            'AP_Devo_Telem',
-            'AP_OSD',
+            'AP_Soaring'
         ],
     )
 

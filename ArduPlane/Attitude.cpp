@@ -18,15 +18,6 @@ float Plane::get_speed_scaler(void)
             speed_scaler = 2.0;
         }
         speed_scaler = constrain_float(speed_scaler, 0.5f, 2.0f);
-
-        if (quadplane.in_vtol_mode() && hal.util->get_soft_armed()) {
-            // when in VTOL modes limit surface movement at low speed to prevent instability
-            float threshold = aparm.airspeed_min * 0.5;
-            if (aspeed < threshold) {
-                float new_scaler = linear_interpolate(0, g.scaling_speed / threshold, aspeed, 0, threshold);
-                speed_scaler = MIN(speed_scaler, new_scaler);
-            }
-        }
     } else {
         if (SRV_Channels::get_output_scaled(SRV_Channel::k_throttle) > 0) {
             speed_scaler = 0.5f + ((float)THROTTLE_CRUISE / SRV_Channels::get_output_scaled(SRV_Channel::k_throttle) / 2.0f);                 // First order taylor expansion of square root
@@ -58,7 +49,7 @@ bool Plane::stick_mixing_enabled(void)
         }
     }
 
-    if (failsafe.rc_failsafe && g.fs_action_short == FS_ACTION_SHORT_FBWA) {
+    if (failsafe.ch3_failsafe && g.short_fs_action == 2) {
         // don't do stick mixing in FBWA glide mode
         return false;
     }
@@ -359,7 +350,7 @@ void Plane::stabilize_acro(float speed_scaler)
     /*
       manual rudder for now
      */
-    steering_control.steering = steering_control.rudder = rudder_input();
+    steering_control.steering = steering_control.rudder = rudder_input;
 }
 
 /*
@@ -373,25 +364,15 @@ void Plane::stabilize()
     }
     float speed_scaler = get_speed_scaler();
 
-    if (quadplane.in_tailsitter_vtol_transition()) {
-        /*
-          during transition to vtol in a tailsitter try to raise the
-          nose rapidly while keeping the wings level
-         */
-        nav_pitch_cd = constrain_float((quadplane.tailsitter.transition_angle+5)*100, 5500, 8500),
-        nav_roll_cd = 0;
-    }
-    
     if (control_mode == TRAINING) {
         stabilize_training(speed_scaler);
     } else if (control_mode == ACRO) {
         stabilize_acro(speed_scaler);
-    } else if ((control_mode == QSTABILIZE ||
-                control_mode == QHOVER ||
-                control_mode == QLOITER ||
-                control_mode == QLAND ||
-                control_mode == QRTL) &&
-               !quadplane.in_tailsitter_vtol_transition()) {
+    } else if (control_mode == QSTABILIZE ||
+               control_mode == QHOVER ||
+               control_mode == QLOITER ||
+               control_mode == QLAND ||
+               control_mode == QRTL) {
         quadplane.control_run();
     } else {
         if (g.stick_mixing == STICK_MIXING_FBW && control_mode != STABILIZE) {
@@ -459,7 +440,9 @@ void Plane::calc_throttle()
 void Plane::calc_nav_yaw_coordinated(float speed_scaler)
 {
     bool disable_integrator = false;
-    int16_t rudder_in = rudder_input();
+    if (control_mode == STABILIZE && rudder_input != 0) {
+        disable_integrator = true;
+    }
 
     int16_t commanded_rudder;
 
@@ -469,15 +452,11 @@ void Plane::calc_nav_yaw_coordinated(float speed_scaler)
             millis() - plane.guided_state.last_forced_rpy_ms.z < 3000) {
         commanded_rudder = plane.guided_state.forced_rpy_cd.z;
     } else {
-        if (control_mode == STABILIZE && rudder_in != 0) {
-            disable_integrator = true;
-        }
-
         commanded_rudder = yawController.get_servo_out(speed_scaler, disable_integrator);
 
         // add in rudder mixing from roll
         commanded_rudder += SRV_Channels::get_output_scaled(SRV_Channel::k_aileron) * g.kff_rudder_mix;
-        commanded_rudder += rudder_in;
+        commanded_rudder += rudder_input;
     }
 
     steering_control.rudder = constrain_int16(commanded_rudder, -4500, 4500);
@@ -510,11 +489,11 @@ void Plane::calc_nav_yaw_ground(void)
         // manual rudder control while still
         steer_state.locked_course = false;
         steer_state.locked_course_err = 0;
-        steering_control.steering = rudder_input();
+        steering_control.steering = rudder_input;
         return;
     }
 
-    float steer_rate = (rudder_input()/4500.0f) * g.ground_steer_dps;
+    float steer_rate = (rudder_input/4500.0f) * g.ground_steer_dps;
     if (flight_stage == AP_Vehicle::FixedWing::FLIGHT_TAKEOFF ||
         flight_stage == AP_Vehicle::FixedWing::FLIGHT_ABORT_LAND) {
         steer_rate = 0;
@@ -684,15 +663,6 @@ void Plane::update_load_factor(void)
     }
     aerodynamic_load_factor = 1.0f / safe_sqrt(cosf(radians(demanded_roll)));
 
-    if (quadplane.in_transition() &&
-        (quadplane.options & QuadPlane::OPTION_LEVEL_TRANSITION)) {
-        /*
-          the user has asked for transitions to be kept level to
-          within LEVEL_ROLL_LIMIT
-         */
-        roll_limit_cd = MIN(roll_limit_cd, g.level_roll_limit*100);
-    }
-    
     if (!aparm.stall_prevention) {
         // stall prevention is disabled
         return;
@@ -707,7 +677,7 @@ void Plane::update_load_factor(void)
     }
        
 
-    float max_load_factor = smoothed_airspeed / MAX(aparm.airspeed_min, 1);
+    float max_load_factor = smoothed_airspeed / aparm.airspeed_min;
     if (max_load_factor <= 1) {
         // our airspeed is below the minimum airspeed. Limit roll to
         // 25 degrees

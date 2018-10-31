@@ -35,11 +35,18 @@ public:
     //////////////////////////////////////////////////////////////////
 
 
+    // The parameter software_type is set up solely for ground station use
+    // and identifies the software type (eg ArduPilotMega versus ArduCopterMega)
+    // GCS will interpret values 0-9 as ArduPilotMega.  Developers may use
+    // values within that range to identify different branches.
+    //
+    static const uint16_t k_software_type = 0;          // 0 for APM trunk
+
     enum {
         // Layout version number, always key zero.
         //
         k_param_format_version = 0,
-        k_param_software_type, // unused;
+        k_param_software_type,
         k_param_num_resets,
         k_param_NavEKF2,
         k_param_g2,
@@ -47,7 +54,6 @@ public:
         k_param_landing,
         k_param_NavEKF3,
         k_param_BoardConfig_CAN,
-        k_param_osd,
 
         // Misc
         //
@@ -215,7 +221,7 @@ public:
         k_param_pitch_limit_min_cd,
         k_param_airspeed_cruise_cm,
         k_param_RTL_altitude_cm,
-        k_param_inverted_flight_ch_unused, // unused
+        k_param_inverted_flight_ch,
         k_param_min_gndspeed_cm,
         k_param_crosstrack_use_wind, // unused
 
@@ -259,17 +265,17 @@ public:
         k_param_throttle_fs_value,
         k_param_throttle_cruise,
 
-        k_param_fs_action_short,
-        k_param_fs_action_long,
+        k_param_short_fs_action,
+        k_param_long_fs_action,
         k_param_gcs_heartbeat_fs_enabled,
         k_param_throttle_slewrate,
         k_param_throttle_suppress_manual,
         k_param_throttle_passthru_stabilize,
         k_param_rc_12_old,
-        k_param_fs_batt_voltage, // unused - moved to AP_BattMonitor
-        k_param_fs_batt_mah,     // unused - moved to AP_BattMonitor
-        k_param_fs_timeout_short,
-        k_param_fs_timeout_long,
+        k_param_fs_batt_voltage,
+        k_param_fs_batt_mah,
+        k_param_short_fs_timeout,
+        k_param_long_fs_timeout,
         k_param_rc_13_old,
         k_param_rc_14_old,
         k_param_tuning,
@@ -348,6 +354,7 @@ public:
     };
 
     AP_Int16 format_version;
+    AP_Int8 software_type;
 
     // Telemetry control
     //
@@ -418,11 +425,13 @@ public:
     AP_Int16 use_reverse_thrust;
 
     // Failsafe
-    AP_Int8 fs_action_short;
-    AP_Int8 fs_action_long;
-    AP_Float fs_timeout_short;
-    AP_Float fs_timeout_long;
+    AP_Int8 short_fs_action;
+    AP_Int8 long_fs_action;
+    AP_Float short_fs_timeout;
+    AP_Float long_fs_timeout;
     AP_Int8 gcs_heartbeat_fs_enabled;
+    AP_Float fs_batt_voltage;
+    AP_Float fs_batt_mah;
 
     // Flight modes
     //
@@ -467,6 +476,7 @@ public:
     AP_Int8 flap_2_percent;
     AP_Int8 flap_2_speed;
     AP_Int8 takeoff_flap_percent;  
+    AP_Int8 inverted_flight_ch;             // 0=disabled, 1-8 is channel for inverted flight trigger
     AP_Int8 stick_mixing;
     AP_Float takeoff_throttle_min_speed;
     AP_Float takeoff_throttle_min_accel;
@@ -508,27 +518,23 @@ public:
     // button reporting library
     AP_Button button;
 
-#if STATS_ENABLED == ENABLED
     // vehicle statistics
     AP_Stats stats;
-#endif
 
     // internal combustion engine control
     AP_ICEngine ice_control;
 
     // RC input channels
-    RC_Channels_Plane rc_channels;
+    RC_Channels rc_channels;
     
     // control over servo output ranges
     SRV_Channels servo_channels;
 
     // whether to enforce acceptance of packets only from sysid_my_gcs
     AP_Int8 sysid_enforce;
-
-#if SOARING_ENABLED == ENABLED
+    
     // ArduSoar parameters
     SoaringController soaring_controller;
-#endif
 
     // dual motor tailsitter rudder to differential thrust scaling: 0-100%
     AP_Int8 rudd_dt_gain;
@@ -539,16 +545,6 @@ public:
     // home reset altitude threshold
     AP_Int8 home_reset_threshold;
 
-#if GRIPPER_ENABLED == ENABLED
-    // Payload Gripper
-    AP_Gripper gripper;
-#endif
-
-    AP_Int32 flight_options;
-
-#ifdef ENABLE_SCRIPTING
-    AP_Scripting scripting;
-#endif // ENABLE_SCRIPTING
 };
 
 extern const AP_Param::Info var_info[];

@@ -32,8 +32,7 @@ bool Plane::start_command(const AP_Mission::Mission_Command& cmd)
 
         AP_Mission::Mission_Command next_nav_cmd;
         const uint16_t next_index = mission.get_current_nav_index() + 1;
-        auto_state.wp_is_land_approach = mission.get_next_nav_cmd(next_index, next_nav_cmd) && (next_nav_cmd.id == MAV_CMD_NAV_LAND) &&
-            !quadplane.is_vtol_land(next_nav_cmd.id);
+        auto_state.wp_is_land_approach = mission.get_next_nav_cmd(next_index, next_nav_cmd) && (next_nav_cmd.id == MAV_CMD_NAV_LAND);
 
         gcs().send_text(MAV_SEVERITY_INFO, "Executing nav command ID #%i",cmd.id);
     } else {
@@ -44,9 +43,6 @@ bool Plane::start_command(const AP_Mission::Mission_Command& cmd)
 
     case MAV_CMD_NAV_TAKEOFF:
         crash_state.is_crashed = false;
-        if (quadplane.is_vtol_takeoff(cmd.id)) {
-            return quadplane.do_vtol_takeoff(cmd);
-        }
         do_takeoff(cmd);
         break;
 
@@ -55,10 +51,6 @@ bool Plane::start_command(const AP_Mission::Mission_Command& cmd)
         break;
 
     case MAV_CMD_NAV_LAND:              // LAND to Waypoint
-        if (quadplane.is_vtol_land(cmd.id)) {
-            crash_state.is_crashed = false;
-            return quadplane.do_vtol_land(cmd);            
-        }
         do_land(cmd);
         break;
 
@@ -118,6 +110,24 @@ bool Plane::start_command(const AP_Mission::Mission_Command& cmd)
         do_set_home(cmd);
         break;
 
+    case MAV_CMD_DO_SET_SERVO:
+        ServoRelayEvents.do_set_servo(cmd.content.servo.channel, cmd.content.servo.pwm);
+        break;
+
+    case MAV_CMD_DO_SET_RELAY:
+        ServoRelayEvents.do_set_relay(cmd.content.relay.num, cmd.content.relay.state);
+        break;
+
+    case MAV_CMD_DO_REPEAT_SERVO:
+        ServoRelayEvents.do_repeat_servo(cmd.content.repeat_servo.channel, cmd.content.repeat_servo.pwm,
+                                         cmd.content.repeat_servo.repeat_count, cmd.content.repeat_servo.cycle_time * 1000.0f);
+        break;
+
+    case MAV_CMD_DO_REPEAT_RELAY:
+        ServoRelayEvents.do_repeat_relay(cmd.content.repeat_relay.num, cmd.content.repeat_relay.repeat_count,
+                                         cmd.content.repeat_relay.cycle_time * 1000.0f);
+        break;
+
     case MAV_CMD_DO_INVERTED_FLIGHT:
         if (cmd.p1 == 0 || cmd.p1 == 1) {
             auto_state.inverted_flight = (bool)cmd.p1;
@@ -149,6 +159,24 @@ bool Plane::start_command(const AP_Mission::Mission_Command& cmd)
     case MAV_CMD_DO_AUTOTUNE_ENABLE:
         autotune_enable(cmd.p1);
         break;
+
+#if CAMERA == ENABLED
+    case MAV_CMD_DO_CONTROL_VIDEO:                      // Control on-board camera capturing. |Camera ID (-1 for all)| Transmission: 0: disabled, 1: enabled compressed, 2: enabled raw| Transmission mode: 0: video stream, >0: single images every n seconds (decimal)| Recording: 0: disabled, 1: enabled compressed, 2: enabled raw| Empty| Empty| Empty|
+        break;
+
+    case MAV_CMD_DO_DIGICAM_CONFIGURE:                  // Mission command to configure an on-board camera controller system. |Modes: P, TV, AV, M, Etc| Shutter speed: Divisor number for one second| Aperture: F stop number| ISO number e.g. 80, 100, 200, Etc| Exposure type enumerator| Command Identity| Main engine cut-off time before camera trigger in seconds/10 (0 means no cut-off)|
+        do_digicam_configure(cmd);
+        break;
+
+    case MAV_CMD_DO_DIGICAM_CONTROL:                    // Mission command to control an on-board camera controller system. |Session control e.g. show/hide lens| Zoom's absolute position| Zooming step value to offset zoom from the current position| Focus Locking, Unlocking or Re-locking| Shooting Command| Command Identity| Empty|
+        // do_digicam_control Send Digicam Control message with the camera library
+        do_digicam_control(cmd);
+        break;
+
+    case MAV_CMD_DO_SET_CAM_TRIGG_DIST:
+        camera.set_trigger_distance(cmd.content.cam_trigg_dist.meters);
+        break;
+#endif
 
 #if PARACHUTE == ENABLED
     case MAV_CMD_DO_PARACHUTE:
@@ -191,10 +219,6 @@ bool Plane::start_command(const AP_Mission::Mission_Command& cmd)
                                             cmd.content.do_engine_control.cold_start,
                                             cmd.content.do_engine_control.height_delay_cm*0.01f);
         break;
-
-    default:
-        // unable to use the command, allow the vehicle to try the next command
-        return false;
     }
 
     return true;
@@ -214,18 +238,12 @@ bool Plane::verify_command(const AP_Mission::Mission_Command& cmd)        // Ret
     switch(cmd.id) {
 
     case MAV_CMD_NAV_TAKEOFF:
-        if (quadplane.is_vtol_takeoff(cmd.id)) {
-            return quadplane.verify_vtol_takeoff(cmd);
-        }
         return verify_takeoff();
 
     case MAV_CMD_NAV_WAYPOINT:
         return verify_nav_wp(cmd);
 
     case MAV_CMD_NAV_LAND:
-        if (quadplane.is_vtol_land(cmd.id)) {
-            return quadplane.verify_vtol_land();            
-        }
         if (flight_stage == AP_Vehicle::FixedWing::FlightStage::FLIGHT_ABORT_LAND) {
             return landing.verify_abort_landing(prev_WP_loc, next_WP_loc, current_loc, auto_state.takeoff_altitude_rel_cm, throttle_suppressed);
 
@@ -280,11 +298,17 @@ bool Plane::verify_command(const AP_Mission::Mission_Command& cmd)        // Ret
     // do commands (always return true)
     case MAV_CMD_DO_CHANGE_SPEED:
     case MAV_CMD_DO_SET_HOME:
+    case MAV_CMD_DO_SET_SERVO:
+    case MAV_CMD_DO_SET_RELAY:
+    case MAV_CMD_DO_REPEAT_SERVO:
+    case MAV_CMD_DO_REPEAT_RELAY:
     case MAV_CMD_DO_INVERTED_FLIGHT:
     case MAV_CMD_DO_LAND_START:
     case MAV_CMD_DO_FENCE_ENABLE:
     case MAV_CMD_DO_AUTOTUNE_ENABLE:
     case MAV_CMD_DO_CONTROL_VIDEO:
+    case MAV_CMD_DO_DIGICAM_CONFIGURE:
+    case MAV_CMD_DO_DIGICAM_CONTROL:
     case MAV_CMD_DO_SET_CAM_TRIGG_DIST:
     case MAV_CMD_DO_SET_ROI:
     case MAV_CMD_DO_MOUNT_CONTROL:
@@ -306,8 +330,8 @@ bool Plane::verify_command(const AP_Mission::Mission_Command& cmd)        // Ret
 
 void Plane::do_RTL(int32_t rtl_altitude)
 {
-    auto_state.next_wp_crosstrack = false;
-    auto_state.crosstrack = false;
+    auto_state.next_wp_no_crosstrack = true;
+    auto_state.no_crosstrack = true;
     prev_WP_loc = current_loc;
     next_WP_loc = rally.calc_best_rally_or_home_location(current_loc, rtl_altitude);
     setup_terrain_target_alt(next_WP_loc);
@@ -322,12 +346,10 @@ void Plane::do_RTL(int32_t rtl_altitude)
     setup_glide_slope();
     setup_turn_angle();
 
-    DataFlash.Log_Write_Mode(control_mode, control_mode_reason);
+    if (should_log(MASK_LOG_MODE))
+        DataFlash.Log_Write_Mode(control_mode);
 }
 
-/*
-  start a NAV_TAKEOFF command
- */
 void Plane::do_takeoff(const AP_Mission::Mission_Command& cmd)
 {
     prev_WP_loc = current_loc;
@@ -451,10 +473,10 @@ void Plane::do_continue_and_change_alt(const AP_Mission::Mission_Command& cmd)
     if (!locations_are_same(prev_WP_loc, next_WP_loc)) {
         // use waypoint based bearing, this is the usual case
         steer_state.hold_course_cd = -1;
-    } else if (AP::gps().status() >= AP_GPS::GPS_OK_FIX_2D) {
+    } else if (ahrs.get_gps().status() >= AP_GPS::GPS_OK_FIX_2D) {
         // use gps ground course based bearing hold
         steer_state.hold_course_cd = -1;
-        bearing = AP::gps().ground_course_cd() * 0.01f;
+        bearing = ahrs.get_gps().ground_course_cd() * 0.01f;
         location_update(next_WP_loc, bearing, 1000); // push it out 1km
     } else {
         // use yaw based bearing hold
@@ -537,7 +559,7 @@ bool Plane::verify_takeoff()
 
         // don't cross-track on completion of takeoff, as otherwise we
         // can end up doing too sharp a turn
-        auto_state.next_wp_crosstrack = false;
+        auto_state.next_wp_no_crosstrack = true;
         return true;
     } else {
         return false;
@@ -570,10 +592,10 @@ bool Plane::verify_nav_wp(const AP_Mission::Mission_Command& cmd)
         }
     }
 
-    if (auto_state.crosstrack) {
-        nav_controller->update_waypoint(prev_WP_loc, flex_next_WP_loc);
-    } else {
+    if (auto_state.no_crosstrack) {
         nav_controller->update_waypoint(current_loc, flex_next_WP_loc);
+    } else {
+        nav_controller->update_waypoint(prev_WP_loc, flex_next_WP_loc);
     }
 
     // see if the user has specified a maximum distance to waypoint
@@ -878,11 +900,40 @@ void Plane::do_change_speed(const AP_Mission::Mission_Command& cmd)
 void Plane::do_set_home(const AP_Mission::Mission_Command& cmd)
 {
     if (cmd.p1 == 1 && gps.status() >= AP_GPS::GPS_OK_FIX_3D) {
-        set_home_persistently(gps.location());
+        init_home();
     } else {
-        plane.set_home(cmd.content.location);
-        gcs().send_ekf_origin();
+        ahrs.set_home(cmd.content.location);
+        home_is_set = HOME_SET_NOT_LOCKED;
+        Log_Write_Home_And_Origin();
+        gcs().send_home(cmd.content.location);
     }
+}
+
+// do_digicam_configure Send Digicam Configure message with the camera library
+void Plane::do_digicam_configure(const AP_Mission::Mission_Command& cmd)
+{
+#if CAMERA == ENABLED
+    camera.configure(cmd.content.digicam_configure.shooting_mode,
+                     cmd.content.digicam_configure.shutter_speed,
+                     cmd.content.digicam_configure.aperture,
+                     cmd.content.digicam_configure.ISO,
+                     cmd.content.digicam_configure.exposure_type,
+                     cmd.content.digicam_configure.cmd_id,
+                     cmd.content.digicam_configure.engine_cutoff_time);
+#endif
+}
+
+// do_digicam_control Send Digicam Control message with the camera library
+void Plane::do_digicam_control(const AP_Mission::Mission_Command& cmd)
+{
+#if CAMERA == ENABLED
+    camera.control(cmd.content.digicam_control.session,
+                   cmd.content.digicam_control.zoom_pos,
+                   cmd.content.digicam_control.zoom_step,
+                   cmd.content.digicam_control.focus_lock,
+                   cmd.content.digicam_control.shooting_cmd,
+                   cmd.content.digicam_control.cmd_id);
+#endif
 }
 
 #if PARACHUTE == ENABLED
@@ -975,23 +1026,20 @@ bool Plane::verify_loiter_heading(bool init)
     int32_t heading_err_cd = wrap_180_cd(bearing_cd - heading_cd);
 
     if (init) {
+        loiter.total_cd =  wrap_360_cd(bearing_cd - heading_cd);
         loiter.sum_cd = 0;
     }
 
     /*
       Check to see if the the plane is heading toward the land
       waypoint. We use 20 degrees (+/-10 deg) of margin so that
-      we can handle 200 degrees/second of yaw.
-
-      After every full circle, extend acceptance criteria to ensure
-      aircraft will not loop forever in case high winds are forcing
-      it beyond 200 deg/sec when passing the desired exit course
+      we can handle 200 degrees/second of yaw. Allow turn count
+      to stop it too to ensure we don't loop around forever in
+      case high winds are forcing us beyond 200 deg/sec at this
+      particular moment.
     */
-
-    // Use integer division to get discrete steps
-    int32_t expanded_acceptance = 1000 * (loiter.sum_cd / 36000);
-
-    if (labs(heading_err_cd) <= 1000 + expanded_acceptance) {
+    if (labs(heading_err_cd) <= 1000  ||
+            loiter.sum_cd > loiter.total_cd) {
         // Want to head in a straight line from _here_ to the next waypoint instead of center of loiter wp
 
         // 0 to xtrack from center of waypoint, 1 to xtrack from tangent exit location

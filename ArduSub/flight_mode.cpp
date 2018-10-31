@@ -1,7 +1,7 @@
 #include "Sub.h"
 
 // change flight mode and perform any necessary initialisation
-// returns true if mode was successfully set
+// returns true if mode was succesfully set
 bool Sub::set_mode(control_mode_t mode, mode_reason_t reason)
 {
     // boolean to record if flight mode could be set
@@ -75,10 +75,6 @@ bool Sub::set_mode(control_mode_t mode, mode_reason_t reason)
         // update notify object
         notify_flight_mode(control_mode);
 
-#if CAMERA == ENABLED
-        camera.set_is_auto_mode(control_mode == AUTO);
-#endif
-
 #if AC_FENCE == ENABLED
         // pilot requested flight mode change during a fence breach indicates pilot is attempting to manually recover
         // this flight mode change could be automatic (i.e. fence, battery, GPS or GCS failsafe)
@@ -98,6 +94,9 @@ bool Sub::set_mode(control_mode_t mode, mode_reason_t reason)
 // called at 100hz or more
 void Sub::update_flight_mode()
 {
+    // Update EKF speed limit - used to limit speed when we are using optical flow
+    ahrs.getEkfControlLimits(ekfGndSpdLimit, ekfNavVelGainScaler);
+
     switch (control_mode) {
     case ACRO:
         acro_run();
@@ -191,11 +190,10 @@ bool Sub::mode_has_manual_throttle(control_mode_t mode)
 //  arming_from_gcs should be set to true if the arming request comes from the ground station
 bool Sub::mode_allows_arming(control_mode_t mode, bool arming_from_gcs)
 {
-    return (mode_has_manual_throttle(mode)
-        || mode == ALT_HOLD
-        || mode == POSHOLD
-        || (arming_from_gcs&& mode == GUIDED)
-    );
+    if (mode_has_manual_throttle(mode) || mode == ALT_HOLD || mode == POSHOLD || (arming_from_gcs && mode == GUIDED)) {
+        return true;
+    }
+    return false;
 }
 
 // notify_flight_mode - sets notify object based on flight mode.  Only used for OreoLED notify device

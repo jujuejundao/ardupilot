@@ -3,13 +3,16 @@
 
 bool Sub::surface_init()
 {
-    if(!control_check_barometer()) {
+#if CONFIG_HAL_BOARD != HAL_BOARD_SITL
+    if (!ap.depth_sensor_present || failsafe.sensor_health) { // can't hold depth without a depth sensor, exit immediately.
+        gcs().send_text(MAV_SEVERITY_WARNING, "BAD DEPTH");
         return false;
     }
+#endif
 
     // initialize vertical speeds and leash lengths
-    pos_control.set_max_speed_z(wp_nav.get_speed_down(), wp_nav.get_speed_up());
-    pos_control.set_max_accel_z(wp_nav.get_accel_z());
+    pos_control.set_speed_z(wp_nav.get_speed_down(), wp_nav.get_speed_up());
+    pos_control.set_accel_z(wp_nav.get_accel_z());
 
     // initialise position and desired velocity
     pos_control.set_alt_target(inertial_nav.get_altitude());
@@ -45,10 +48,10 @@ void Sub::surface_run()
     target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->get_control_in());
 
     // call attitude controller
-    attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(target_roll, target_pitch, target_yaw_rate);
+    attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(target_roll, target_pitch, target_yaw_rate, get_smoothing_gain());
 
     // set target climb rate
-    float cmb_rate = constrain_float(abs(wp_nav.get_speed_up()), 1, pos_control.get_max_speed_up());
+    float cmb_rate = constrain_float(abs(wp_nav.get_speed_up()), 1, pos_control.get_speed_up());
 
     // record desired climb rate for logging
     desired_climb_rate = cmb_rate;

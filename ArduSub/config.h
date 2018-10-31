@@ -182,7 +182,7 @@
 #endif
 
 #ifndef ACRO_YAW_P
-# define ACRO_YAW_P                3.375f
+# define ACRO_YAW_P                4.5f
 #endif
 
 #ifndef ACRO_LEVEL_MAX_ANGLE
@@ -232,6 +232,22 @@
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
+// Velocity (horizontal) gains
+//
+#ifndef VEL_XY_P
+# define VEL_XY_P              1.0f
+#endif
+#ifndef VEL_XY_I
+# define VEL_XY_I              0.5f
+#endif
+#ifndef VEL_XY_IMAX
+# define VEL_XY_IMAX           1000
+#endif
+#ifndef VEL_XY_FILT_HZ
+# define VEL_XY_FILT_HZ        5.0f
+#endif
+
+//////////////////////////////////////////////////////////////////////////////
 // PosHold parameter defaults
 //
 #ifndef POSHOLD_ENABLED
@@ -244,6 +260,32 @@
 
 #ifndef THR_DZ_DEFAULT
 # define THR_DZ_DEFAULT         100             // the deadzone above and below mid throttle while in althold or loiter
+#endif
+
+#ifndef ALT_HOLD_P
+# define ALT_HOLD_P            3.0f
+#endif
+
+// Velocity (vertical) control gains
+#ifndef VEL_Z_P
+# define VEL_Z_P       8.0f
+#endif
+
+// Accel (vertical) control gains
+#ifndef ACCEL_Z_P
+# define ACCEL_Z_P     0.50f
+#endif
+#ifndef ACCEL_Z_I
+# define ACCEL_Z_I     0.1f
+#endif
+#ifndef ACCEL_Z_D
+# define ACCEL_Z_D     0.0f
+#endif
+#ifndef ACCEL_Z_IMAX
+# define ACCEL_Z_IMAX  100
+#endif
+#ifndef ACCEL_Z_FILT_HZ
+# define ACCEL_Z_FILT_HZ   20.0f
 #endif
 
 // default maximum vertical velocity and acceleration the pilot may request
@@ -284,7 +326,11 @@
     MASK_LOG_MOTBATT
 #endif
 
-// Enable/disable Fence
+//////////////////////////////////////////////////////////////////////////////
+// AP_Limits Defaults
+//
+
+// Enable/disable AP_Limits
 #ifndef AC_FENCE
 #define AC_FENCE ENABLED
 #endif
