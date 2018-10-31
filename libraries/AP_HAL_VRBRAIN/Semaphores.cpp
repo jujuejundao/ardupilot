@@ -3,7 +3,6 @@
 #if CONFIG_HAL_BOARD == HAL_BOARD_VRBRAIN
 
 #include "Semaphores.h"
-#include <nuttx/arch.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -16,10 +15,6 @@ bool Semaphore::give()
 
 bool Semaphore::take(uint32_t timeout_ms) 
 {
-    if (up_interrupt_context()) {
-        // don't ever wait on a semaphore in interrupt context
-        return take_nonblocking();
-    }
     if (timeout_ms == HAL_SEMAPHORE_BLOCK_FOREVER) {
         return pthread_mutex_lock(&_lock) == 0;
     }

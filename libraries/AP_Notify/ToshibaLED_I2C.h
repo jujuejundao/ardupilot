@@ -17,12 +17,10 @@
 #pragma once
 
 #include <AP_HAL/I2CDevice.h>
-#include "RGBLed.h"
+#include "ToshibaLED.h"
 
-class ToshibaLED_I2C : public RGBLed
+class ToshibaLED_I2C : public ToshibaLED
 {
-public:
-    ToshibaLED_I2C(uint8_t bus);
 protected:
     bool hw_init(void) override;
     bool hw_set_rgb(uint8_t r, uint8_t g, uint8_t b) override;
@@ -34,5 +32,4 @@ private:
     struct {
         uint8_t r, g, b;
     } rgb;
-    uint8_t _bus;
 };

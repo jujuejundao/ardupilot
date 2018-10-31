@@ -20,8 +20,13 @@ public:
         _roll_idx(SRV_Channel::k_none),
         _tilt_idx(SRV_Channel::k_none),
         _pan_idx(SRV_Channel::k_none),
-        _open_idx(SRV_Channel::k_none)
+        _open_idx(SRV_Channel::k_none),
+        _last_check_servo_map_ms(0)
     {
+        // init to no axis being controlled
+        _flags.roll_control = false;
+        _flags.tilt_control = false;
+        _flags.pan_control = false;
     }
 
     // init - performs any required initialisation for this instance
@@ -36,8 +41,8 @@ public:
     // set_mode - sets mount's mode
     virtual void set_mode(enum MAV_MOUNT_MODE mode);
 
-    // send_mount_status - called to allow mounts to send their status to GCS using the MOUNT_STATUS message
-    virtual void send_mount_status(mavlink_channel_t chan) override;
+    // status_msg - called to allow mounts to send their status to GCS using the MOUNT_STATUS message
+    virtual void status_msg(mavlink_channel_t chan);
 
 private:
 

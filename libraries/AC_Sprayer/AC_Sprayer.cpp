@@ -48,16 +48,11 @@ const AP_Param::GroupInfo AC_Sprayer::var_info[] = {
     AP_GROUPEND
 };
 
-AC_Sprayer::AC_Sprayer()
+AC_Sprayer::AC_Sprayer(const AP_InertialNav* inav) :
+    _inav(inav),
+    _speed_over_min_time(0),
+    _speed_under_min_time(0)
 {
-    if (_s_instance) {
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-        AP_HAL::panic("Too many sprayers");
-#endif
-        return;
-    }
-    _s_instance = this;
-
     AP_Param::setup_object_defaults(this, var_info);
 
     // check for silly parameter values
@@ -69,15 +64,6 @@ AC_Sprayer::AC_Sprayer()
     }
 
     // To-Do: ensure that the pump and spinner servo channels are enabled
-}
-
-/*
- * Get the AP_Sprayer singleton
- */
-AC_Sprayer *AC_Sprayer::_s_instance = nullptr;
-AC_Sprayer *AC_Sprayer::get_instance()
-{
-    return _s_instance;
 }
 
 void AC_Sprayer::run(const bool true_false)
@@ -106,7 +92,8 @@ void AC_Sprayer::stop_spraying()
 }
 
 /// update - adjust pwm of servo controlling pump speed according to the desired quantity and our horizontal speed
-void AC_Sprayer::update()
+void
+AC_Sprayer::update()
 {
     // exit immediately if we are disabled or shouldn't be running
     if (!_enabled || !running()) {
@@ -120,13 +107,8 @@ void AC_Sprayer::update()
     }
 
     // get horizontal velocity
-    Vector3f velocity;
-    if (!AP::ahrs().get_velocity_NED(velocity)) {
-        // treat unknown velocity as zero which should lead to pump stopping
-        // velocity will already be zero but this avoids a coverity warning
-        velocity.zero();
-    }
-    float ground_speed = norm(velocity.x * 100.0f, velocity.y * 100.0f);
+    const Vector3f &velocity = _inav->get_velocity();
+    float ground_speed = norm(velocity.x,velocity.y);
 
     // get the current time
     const uint32_t now = AP_HAL::millis();
@@ -149,7 +131,7 @@ void AC_Sprayer::update()
         }
         // reset the speed under timer
         _speed_under_min_time = 0;
-    } else {
+    }else{
         // we are under the min speed.
         if (_flags.spraying) {
             // set the timer if this is the first time we've dropped below the min speed
@@ -181,16 +163,7 @@ void AC_Sprayer::update()
         SRV_Channels::move_servo(SRV_Channel::k_sprayer_pump, pos, 0, 10000);
         SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spinner_pwm);
         _flags.spraying = true;
-    } else {
+    }else{
         stop_spraying();
     }
 }
-
-namespace AP {
-
-AC_Sprayer *sprayer()
-{
-    return AC_Sprayer::get_instance();
-}
-
-};

@@ -16,20 +16,12 @@
  */
 #define PX4_GPIO_FMU_SERVO_PIN(n)       (n+50)
 
-#ifndef HAL_GPIO_A_LED_PIN
-#define HAL_GPIO_A_LED_PIN        27
-#endif
-#ifndef HAL_GPIO_B_LED_PIN
-#define HAL_GPIO_B_LED_PIN        26
-#endif
-#ifndef HAL_GPIO_C_LED_PIN
-#define HAL_GPIO_C_LED_PIN        25
-#endif
-#ifndef HAL_GPIO_LED_ON
-#define HAL_GPIO_LED_ON           0
-#endif
-#ifndef HAL_GPIO_LED_OFF
-#define HAL_GPIO_LED_OFF          1
+#if CONFIG_HAL_BOARD == HAL_BOARD_PX4
+ # define HAL_GPIO_A_LED_PIN        27
+ # define HAL_GPIO_B_LED_PIN        26
+ # define HAL_GPIO_C_LED_PIN        25
+ # define HAL_GPIO_LED_ON           LOW
+ # define HAL_GPIO_LED_OFF          HIGH
 #endif
 
 class PX4::PX4GPIO : public AP_HAL::GPIO {
@@ -37,6 +29,7 @@ public:
     PX4GPIO();
     void    init() override;
     void    pinMode(uint8_t pin, uint8_t output) override;
+    int8_t  analogPinToDigitalPin(uint8_t pin) override;
     uint8_t read(uint8_t pin) override;
     void    write(uint8_t pin, uint8_t value) override;
     void    toggle(uint8_t pin) override;
@@ -45,9 +38,7 @@ public:
     AP_HAL::DigitalSource* channel(uint16_t n) override;
 
     /* Interrupt interface: */
-    bool attach_interrupt(uint8_t interrupt_num,
-                          irq_handler_fn_t fn,
-                          INTERRUPT_TRIGGER_TYPE mode) override;
+    bool attach_interrupt(uint8_t interrupt_num, AP_HAL::Proc p, uint8_t mode) override;
 
     /* return true if USB cable is connected */
     bool usb_connected(void) override;
@@ -57,20 +48,10 @@ public:
 
 private:
     int _led_fd = -1;
+    int _tone_alarm_fd = -1;
     int _gpio_fmu_fd = -1;
     int _gpio_io_fd = -1;
     bool _usb_connected = false;
-
-    static int irq_handler_gpio0(int irq, void *context);
-    static int irq_handler_gpio1(int irq, void *context);
-    static int irq_handler_gpio2(int irq, void *context);
-    static int irq_handler_gpio3(int irq, void *context);
-    static int irq_handler_gpio4(int irq, void *context);
-    static int irq_handler_gpio5(int irq, void *context);
-    static void irq_handler(uint8_t pin);
-
-    static uint32_t pin_to_gpio(uint8_t pin);
-    static AP_HAL::GPIO::irq_handler_fn_t pin_handlers[];
 };
 
 class PX4::PX4DigitalSource : public AP_HAL::DigitalSource {

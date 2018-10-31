@@ -111,14 +111,6 @@ void SocketAPM::set_blocking(bool blocking)
 }
 
 /*
-  set cloexec state
- */
-void SocketAPM::set_cloexec()
-{
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
-}
-
-/*
   send some data
  */
 ssize_t SocketAPM::send(const void *buf, size_t size)

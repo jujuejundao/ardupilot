@@ -23,19 +23,13 @@ public:
     }
 
     uint8_t map_bus_number(uint8_t bus) const;
-
-    // setup instance_lock
-    static void init_lock(void) {
-        pthread_mutex_init(&instance_lock, nullptr);
-    }
     
 private:
     static uint8_t instance;
-    static pthread_mutex_t instance_lock;
     bool init_done;
     bool init_ok;
-    char devname[11];
-    char devpath[15];
+    char devname[10];
+    char devpath[14];
 };
 
 

@@ -16,13 +16,11 @@ Prerequisites:
 
 2A) Installing just the Development Environment:
 
-    Download and run the script "InstallDevEnvironment.ps1" (right click -> Run in Powershell). This will install Cygwin to C:\cygwin and MAVProxy to C:\Program Files (x86)\MAVProxy
+    Run the script "InstallDevEnvironment.ps1" (right click -> Run in Powershell). This will install Cygwin to C:\cygwin and MAVProxy to C:\Program Files (x86)\MAVProxy
     
 2B) Installing the Development Environment and APM source code:
 
-    Download and run the script "InstallDevEnvironmentAndAPMSource.ps1" (right click -> Run in Powershell). This will install Cygwin to C:\cygwin and MAVProxy to C:\Program Files (x86)\MAVProxy. The APM source code will be in C:\cygwin\home\<username>\ardupilot
-    
-NOTE: When running the above script, you may recieve an error due to the default Windows security policy not allowing downloaded scripts to run. See https://www.howtogeek.com/106273/how-to-allow-the-execution-of-powershell-scripts-on-windows-7/ for details on how to disable this policy.
+    Run the script "InstallDevEnvironmentAndAPMSource.ps1" (right click -> Run in Powershell). This will install Cygwin to C:\cygwin and MAVProxy to C:\Program Files (x86)\MAVProxy. The APM source code will be in C:\cygwin\home\<username>\ardupilot
     
 3) Running SITL:
 

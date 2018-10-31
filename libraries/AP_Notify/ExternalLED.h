@@ -28,7 +28,7 @@ class ExternalLED: public NotifyDevice
 {
 public:
     // constructor
-    ExternalLED() : _pattern(NONE) {}
+    ExternalLED() : _counter(0), _counter2(0), _pattern(NONE), _pattern_counter(0) {}
 
     // initialise the LED driver
     bool init(void);

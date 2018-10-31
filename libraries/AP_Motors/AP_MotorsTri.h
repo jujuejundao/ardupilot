@@ -32,17 +32,20 @@ public:
     // set update rate to motors - a value in hertz
     void                set_update_rate( uint16_t speed_hz );
 
-    // output_test_seq - spin a motor at the pwm value specified
+    // enable - starts allowing signals to be sent to motors
+    virtual void        enable();
+
+    // output_test - spin a motor at the pwm value specified
     //  motor_seq is the motor's sequence number from 1 to the number of motors on the frame
     //  pwm value is an actual pwm value that will be output, normally in the range of 1000 ~ 2000
-    virtual void        output_test_seq(uint8_t motor_seq, int16_t pwm) override;
+    virtual void        output_test(uint8_t motor_seq, int16_t pwm);
 
     // output_to_motors - sends minimum values out to the motors
     virtual void        output_to_motors();
 
     // get_motor_mask - returns a bitmask of which outputs are being used for motors or servos (1 means being used)
     //  this can be used to ensure other pwm outputs (i.e. for servos) do not conflict
-    uint16_t            get_motor_mask() override;
+    virtual uint16_t    get_motor_mask();
 
     // output a thrust to all motors that match a given motor
     // mask. This is used to control tiltrotor motors in forward

@@ -32,7 +32,4 @@ test -n "$VRBRAIN_ROOT" && test -d "$VRBRAIN_ROOT" && {
     ./Tools/scripts/build_all_vrbrain.sh
 }
 
-echo "Testing configure all"
-./Tools/scripts/configure_all.py
-
 exit 0

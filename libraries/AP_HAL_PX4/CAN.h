@@ -255,7 +255,7 @@ public:
     bool is_initialized() override;
 };
 
-class PX4CANManager: public AP_HAL::CANManager, public uavcan::ICanDriver {
+class PX4CANManager: public AP_HAL::CANManager {
     BusEvent update_event_;
     PX4CAN if0_;
     PX4CAN if1_;
@@ -270,6 +270,8 @@ class PX4CANManager: public AP_HAL::CANManager, public uavcan::ICanDriver {
     PX4CAN* ifaces[CAN_STM32_NUM_IFACES];
     uint8_t _ifaces_num;
     uint8_t _ifaces_out_to_in[CAN_STM32_NUM_IFACES];
+
+    AP_UAVCAN *p_uavcan;
 
 public:
     PX4CANManager();
@@ -308,5 +310,8 @@ public:
 
     bool is_initialized() override;
     void initialized(bool val) override;
+
+    AP_UAVCAN *get_UAVCAN(void) override;
+    void set_UAVCAN(AP_UAVCAN *uavcan) override;
 };
 }

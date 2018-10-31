@@ -25,11 +25,17 @@ extern const AP_HAL::HAL& hal;
 // initialisation
 void DataFlash_MAVLink::Init()
 {
+    semaphore = hal.util->new_semaphore();
+    if (semaphore == nullptr) {
+        AP_HAL::panic("Failed to create DataFlash_MAVLink semaphore");
+        return;
+    }
+
     DataFlash_Backend::Init();
 
     _blocks = nullptr;
     while (_blockcount >= 8) { // 8 is a *magic* number
-        _blocks = (struct dm_block *) calloc(_blockcount, sizeof(struct dm_block));
+        _blocks = (struct dm_block *) malloc(_blockcount * sizeof(_blocks[0]));
         if (_blocks != nullptr) {
             break;
         }
@@ -44,6 +50,10 @@ void DataFlash_MAVLink::Init()
     stats_init();
 
     _initialised = true;
+    _logging_started = true; // in actual fact, we throw away
+                             // everything until a client connects.
+                             // This stops calls to start_new_log from
+                             // the vehicles
 }
 
 bool DataFlash_MAVLink::logging_failed() const
@@ -122,13 +132,13 @@ bool DataFlash_MAVLink::WritesOK() const
 // DM_write: 70734 events, 0 overruns, 167806us elapsed, 2us avg, min 1us max 34us 0.620us rms
 bool DataFlash_MAVLink::_WritePrioritisedBlock(const void *pBuffer, uint16_t size, bool is_critical)
 {
-    if (!semaphore.take_nonblocking()) {
+    if (!semaphore->take_nonblocking()) {
         _dropped++;
         return false;
     }
 
     if (! WriteBlockCheckStartupMessages()) {
-        semaphore.give();
+        semaphore->give();
         return false;
     }
 
@@ -137,7 +147,7 @@ bool DataFlash_MAVLink::_WritePrioritisedBlock(const void *pBuffer, uint16_t siz
             // do not count the startup packets as being dropped...
             _dropped++;
         }
-        semaphore.give();
+        semaphore->give();
         return false;
     }
 
@@ -149,7 +159,7 @@ bool DataFlash_MAVLink::_WritePrioritisedBlock(const void *pBuffer, uint16_t siz
             if (_current_block == nullptr) {
                 // should not happen - there's a sanity check above
                 internal_error();
-                semaphore.give();
+                semaphore->give();
                 return false;
             }
         }
@@ -166,7 +176,7 @@ bool DataFlash_MAVLink::_WritePrioritisedBlock(const void *pBuffer, uint16_t siz
         }
     }
 
-    semaphore.give();
+    semaphore->give();
 
     return true;
 }
@@ -272,7 +282,7 @@ void DataFlash_MAVLink::remote_log_block_status_msg(mavlink_channel_t chan,
 {
     mavlink_remote_log_block_status_t packet;
     mavlink_msg_remote_log_block_status_decode(msg, &packet);
-    if (!semaphore.take_nonblocking()) {
+    if (!semaphore->take_nonblocking()) {
         return;
     }
     if(packet.status == 0){
@@ -280,7 +290,7 @@ void DataFlash_MAVLink::remote_log_block_status_msg(mavlink_channel_t chan,
     } else{
         handle_ack(chan, msg, packet.seqno);
     }
-    semaphore.give();
+    semaphore->give();
 }
 
 void DataFlash_MAVLink::handle_retry(uint32_t seqno)
@@ -346,7 +356,7 @@ void DataFlash_MAVLink::Log_Write_DF_MAV(DataFlash_MAVLink &df)
 
 void DataFlash_MAVLink::stats_log()
 {
-    if (!_initialised) {
+    if (!_initialised || !_logging_started) {
         return;
     }
     if (stats.collection_count == 0) {
@@ -391,10 +401,10 @@ uint8_t DataFlash_MAVLink::queue_size(dm_block_queue_t queue)
 
 void DataFlash_MAVLink::stats_collect()
 {
-    if (!_initialised) {
+    if (!_initialised || !_logging_started) {
         return;
     }
-    if (!semaphore.take_nonblocking()) {
+    if (!semaphore->take_nonblocking()) {
         return;
     }
     uint8_t pending = queue_size(_blocks_pending);
@@ -405,7 +415,7 @@ void DataFlash_MAVLink::stats_collect()
     if (sfree != _blockcount_free) {
         internal_error();
     }
-    semaphore.give();
+    semaphore->give();
 
     stats.state_pending += pending;
     stats.state_sent += sent;
@@ -466,31 +476,31 @@ bool DataFlash_MAVLink::send_log_blocks_from_queue(dm_block_queue_t &queue)
 
 void DataFlash_MAVLink::push_log_blocks()
 {
-    if (!_initialised || !_sending_to_client) {
+    if (!_initialised || !_logging_started ||!_sending_to_client) {
         return;
     }
 
     DataFlash_Backend::WriteMoreStartupMessages();
 
-    if (!semaphore.take_nonblocking()) {
+    if (!semaphore->take_nonblocking()) {
         return;
     }
 
     if (! send_log_blocks_from_queue(_blocks_retry)) {
-        semaphore.give();
+        semaphore->give();
         return;
     }
 
     if (! send_log_blocks_from_queue(_blocks_pending)) {
-        semaphore.give();
+        semaphore->give();
         return;
     }
-    semaphore.give();
+    semaphore->give();
 }
 
 void DataFlash_MAVLink::do_resends(uint32_t now)
 {
-    if (!_initialised || !_sending_to_client) {
+    if (!_initialised || !_logging_started ||!_sending_to_client) {
         return;
     }
 
@@ -500,7 +510,7 @@ void DataFlash_MAVLink::do_resends(uint32_t now)
     }
     uint32_t oldest = now - 100; // 100 milliseconds before resend.  Hmm.
     while (count_to_send-- > 0) {
-        if (!semaphore.take_nonblocking()) {
+        if (!semaphore->take_nonblocking()) {
             return;
         }
         for (struct dm_block *block=_blocks_sent.oldest; block != nullptr; block=block->next) {
@@ -508,13 +518,13 @@ void DataFlash_MAVLink::do_resends(uint32_t now)
             if (block->last_sent < oldest) {
                 if (! send_log_block(*block)) {
                     // failed to send the block; try again later....
-                    semaphore.give();
+                    semaphore->give();
                     return;
                 }
                 stats.resends++;
             }
         }
-        semaphore.give();
+        semaphore->give();
     }
 }
 
@@ -526,7 +536,7 @@ void DataFlash_MAVLink::periodic_10Hz(const uint32_t now)
     do_resends(now);
     stats_collect();
 }
-void DataFlash_MAVLink::periodic_1Hz()
+void DataFlash_MAVLink::periodic_1Hz(const uint32_t now)
 {
     if (_sending_to_client &&
         _last_response_time + 10000 < _last_send_time) {
@@ -538,7 +548,7 @@ void DataFlash_MAVLink::periodic_1Hz()
     stats_log();
 }
 
-void DataFlash_MAVLink::periodic_fullrate()
+void DataFlash_MAVLink::periodic_fullrate(uint32_t now)
 {
     push_log_blocks();
 }

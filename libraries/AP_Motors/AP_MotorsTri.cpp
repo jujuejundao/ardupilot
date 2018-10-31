@@ -75,6 +75,16 @@ void AP_MotorsTri::set_update_rate( uint16_t speed_hz )
     rc_set_freq(mask, _speed_hz);
 }
 
+// enable - starts allowing signals to be sent to motors
+void AP_MotorsTri::enable()
+{
+    // enable output channels
+    rc_enable_ch(AP_MOTORS_MOT_1);
+    rc_enable_ch(AP_MOTORS_MOT_2);
+    rc_enable_ch(AP_MOTORS_MOT_4);
+    rc_enable_ch(AP_MOTORS_CH_TRI_YAW);
+}
+
 void AP_MotorsTri::output_to_motors()
 {
     switch (_spool_mode) {
@@ -109,16 +119,10 @@ void AP_MotorsTri::output_to_motors()
 uint16_t AP_MotorsTri::get_motor_mask()
 {
     // tri copter uses channels 1,2,4 and 7
-    uint16_t motor_mask = (1U << AP_MOTORS_MOT_1) |
-                          (1U << AP_MOTORS_MOT_2) |
-                          (1U << AP_MOTORS_MOT_4) |
-                          (1U << AP_MOTORS_CH_TRI_YAW);
-    uint16_t mask = rc_map_mask(motor_mask);
-
-    // add parent's mask
-    mask |= AP_MotorsMulticopter::get_motor_mask();
-
-    return mask;
+    return rc_map_mask((1U << AP_MOTORS_MOT_1) |
+                       (1U << AP_MOTORS_MOT_2) |
+                       (1U << AP_MOTORS_MOT_4) |
+                       (1U << AP_MOTORS_CH_TRI_YAW));
 }
 
 // output_armed - sends commands to the motors
@@ -129,7 +133,6 @@ void AP_MotorsTri::output_armed_stabilizing()
     float   pitch_thrust;               // pitch thrust input value, +/- 1.0
     float   yaw_thrust;                 // yaw thrust input value, +/- 1.0
     float   throttle_thrust;            // throttle thrust input value, 0.0 - 1.0
-    float   throttle_avg_max;           // throttle thrust average maximum value, 0.0 - 1.0
     float   throttle_thrust_best_rpy;   // throttle providing maximum roll, pitch and yaw range without climbing
     float   rpy_scale = 1.0f;           // this is used to scale the roll, pitch and yaw to fit within the motor limits
     float   rpy_low = 0.0f;             // lowest motor value
@@ -140,12 +143,10 @@ void AP_MotorsTri::output_armed_stabilizing()
     _yaw_servo_angle_max_deg = constrain_float(_yaw_servo_angle_max_deg, AP_MOTORS_TRI_SERVO_RANGE_DEG_MIN, AP_MOTORS_TRI_SERVO_RANGE_DEG_MAX);
 
     // apply voltage and air pressure compensation
-    const float compensation_gain = get_compensation_gain();
-    roll_thrust = _roll_in * compensation_gain;
-    pitch_thrust = _pitch_in * compensation_gain;
-    yaw_thrust = _yaw_in * compensation_gain * sinf(radians(_yaw_servo_angle_max_deg)); // we scale this so a thrust request of 1.0f will ask for full servo deflection at full rear throttle
-    throttle_thrust = get_throttle() * compensation_gain;
-    throttle_avg_max = _throttle_avg_max * compensation_gain;
+    roll_thrust = _roll_in * get_compensation_gain();
+    pitch_thrust = _pitch_in * get_compensation_gain();
+    yaw_thrust = _yaw_in * get_compensation_gain()*sinf(radians(_yaw_servo_angle_max_deg)); // we scale this so a thrust request of 1.0f will ask for full servo deflection at full rear throttle
+    throttle_thrust = get_throttle() * get_compensation_gain();
 
     // calculate angle of yaw pivot
     _pivot_angle = safe_asin(yaw_thrust);
@@ -167,7 +168,7 @@ void AP_MotorsTri::output_armed_stabilizing()
         limit.throttle_upper = true;
     }
 
-    throttle_avg_max = constrain_float(throttle_avg_max, throttle_thrust, _throttle_thrust_max);
+    _throttle_avg_max = constrain_float(_throttle_avg_max, throttle_thrust, _throttle_thrust_max);
 
     // The following mix may be offer less coupling between axis but needs testing
     //_thrust_right = roll_thrust * -0.5f + pitch_thrust * 1.0f;
@@ -204,7 +205,7 @@ void AP_MotorsTri::output_armed_stabilizing()
     //      We will choose #2 (a mix of pilot and hover throttle) only when the throttle is quite low.  We favor reducing throttle instead of better yaw control because the pilot has commanded it
 
     // check everything fits
-    throttle_thrust_best_rpy = MIN(0.5f*thrust_max - (rpy_low+rpy_high)/2.0, throttle_avg_max);
+    throttle_thrust_best_rpy = MIN(0.5f*thrust_max - (rpy_low+rpy_high)/2.0, _throttle_avg_max);
     if(is_zero(rpy_low)){
         rpy_scale = 1.0f;
     } else {
@@ -247,10 +248,10 @@ void AP_MotorsTri::output_armed_stabilizing()
     _thrust_rear = constrain_float(_thrust_rear, 0.0f, 1.0f);
 }
 
-// output_test_seq - spin a motor at the pwm value specified
+// output_test - spin a motor at the pwm value specified
 //  motor_seq is the motor's sequence number from 1 to the number of motors on the frame
 //  pwm value is an actual pwm value that will be output, normally in the range of 1000 ~ 2000
-void AP_MotorsTri::output_test_seq(uint8_t motor_seq, int16_t pwm)
+void AP_MotorsTri::output_test(uint8_t motor_seq, int16_t pwm)
 {
     // exit immediately if not armed
     if (!armed()) {

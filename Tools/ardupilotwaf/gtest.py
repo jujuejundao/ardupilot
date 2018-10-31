@@ -16,11 +16,11 @@ def configure(cfg):
         return
 
     board = cfg.get_board()
-    if isinstance(board, boards.px4) or isinstance(board, boards.chibios):
+    if isinstance(board, boards.px4):
         # toolchain is currently broken for gtest
         cfg.msg(
             'Gtest',
-            'STM32 boards currently don\'t support compiling gtest',
+            'PX4 boards currently don\'t support compiling gtest',
             color='YELLOW',
         )
         return

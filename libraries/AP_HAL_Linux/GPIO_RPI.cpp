@@ -1,8 +1,12 @@
 #include <AP_HAL/AP_HAL.h>
 
-#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_ERLEBRAIN2 || \
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO || \
+    CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_RASPILOT || \
+    CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_ERLEBRAIN2 || \
     CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BH || \
     CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_DARK || \
+    CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO2 || \
+    CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_URUS || \
     CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_PXFMINI
 
 #include <errno.h>
@@ -30,7 +34,6 @@
 #define GPIO_SET_HIGH       *(_gpio+7)  // sets   bits which are 1
 #define GPIO_SET_LOW        *(_gpio+10) // clears bits which are 1
 #define GPIO_GET(g)         (*(_gpio+13)&(1<<g)) // 0 if LOW, (1<<g) if HIGH
-#define GPIO_RPI_MAX_NUMBER_PINS 32
 
 using namespace Linux;
 
@@ -92,11 +95,13 @@ void GPIO_RPI::pinMode(uint8_t pin, uint8_t output, uint8_t alt)
     }
 }
 
+int8_t GPIO_RPI::analogPinToDigitalPin(uint8_t pin)
+{
+    return -1;
+}
+
 uint8_t GPIO_RPI::read(uint8_t pin)
 {
-    if (pin >= GPIO_RPI_MAX_NUMBER_PINS) {
-        return 0;
-    }
     uint32_t value = GPIO_GET(pin);
     return value ? 1: 0;
 }
@@ -119,6 +124,12 @@ void GPIO_RPI::toggle(uint8_t pin)
 AP_HAL::DigitalSource* GPIO_RPI::channel(uint16_t n)
 {
     return new DigitalSource(n);
+}
+
+/* Interrupt interface: */
+bool GPIO_RPI::attach_interrupt(uint8_t interrupt_num, AP_HAL::Proc p, uint8_t mode)
+{
+    return true;
 }
 
 bool GPIO_RPI::usb_connected(void)

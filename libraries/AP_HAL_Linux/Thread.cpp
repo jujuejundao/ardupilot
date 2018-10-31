@@ -17,7 +17,6 @@
 #include "Thread.h"
 
 #include <alloca.h>
-#include <limits.h>
 #include <sys/types.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -40,10 +39,6 @@ void *Thread::_run_trampoline(void *arg)
     Thread *thread = static_cast<Thread *>(arg);
     thread->_poison_stack();
     thread->_run();
-
-    if (thread->_auto_free) {
-        delete thread;
-    }
 
     return nullptr;
 }
@@ -244,7 +239,7 @@ bool Thread::set_stack_size(size_t stack_size)
         return false;
     }
 
-    _stack_size = MAX(stack_size, (size_t) PTHREAD_STACK_MIN);
+    _stack_size = stack_size;
 
     return true;
 }

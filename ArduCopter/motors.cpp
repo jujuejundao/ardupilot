@@ -13,39 +13,26 @@ void Copter::arm_motors_check()
 {
     static int16_t arming_counter;
 
-    // check if arming/disarm using rudder is allowed
-    AP_Arming::ArmingRudder arming_rudder = arming.get_rudder_arming_type();
-    if (arming_rudder == AP_Arming::ARMING_RUDDER_DISABLED) {
-        return;
-    }
-
-#if TOY_MODE_ENABLED == ENABLED
-    if (g2.toy_mode.enabled()) {
-        // not armed with sticks in toy mode
-        return;
-    }
-#endif
-
     // ensure throttle is down
     if (channel_throttle->get_control_in() > 0) {
         arming_counter = 0;
         return;
     }
 
-    int16_t yaw_in = channel_yaw->get_control_in();
+    int16_t tmp = channel_yaw->get_control_in();
 
     // full right
-    if (yaw_in > 4000) {
+    if (tmp > 4000) {
 
         // increase the arming counter to a maximum of 1 beyond the auto trim counter
-        if (arming_counter <= AUTO_TRIM_DELAY) {
+        if( arming_counter <= AUTO_TRIM_DELAY ) {
             arming_counter++;
         }
 
         // arm the motors and configure for flight
         if (arming_counter == ARM_DELAY && !motors->armed()) {
             // reset arming counter if arming fail
-            if (!init_arm_motors(AP_Arming::ArmingMethod::RUDDER)) {
+            if (!init_arm_motors(false)) {
                 arming_counter = 0;
             }
         }
@@ -57,15 +44,15 @@ void Copter::arm_motors_check()
             auto_disarm_begin = millis();
         }
 
-    // full left and rudder disarming is enabled
-    } else if ((yaw_in < -4000) && (arming_rudder == AP_Arming::ARMING_RUDDER_ARMDISARM)) {
-        if (!flightmode->has_manual_throttle() && !ap.land_complete) {
+    // full left
+    }else if (tmp < -4000) {
+        if (!mode_has_manual_throttle(control_mode) && !ap.land_complete) {
             arming_counter = 0;
             return;
         }
 
         // increase the counter to a maximum of 1 beyond the disarm delay
-        if (arming_counter <= DISARM_DELAY) {
+        if( arming_counter <= DISARM_DELAY ) {
             arming_counter++;
         }
 
@@ -75,7 +62,7 @@ void Copter::arm_motors_check()
         }
 
     // Yaw is centered so reset arming counter
-    } else {
+    }else{
         arming_counter = 0;
     }
 }
@@ -111,10 +98,10 @@ void Copter::auto_disarm_check()
     } else {
         bool sprung_throttle_stick = (g.throttle_behavior & THR_BEHAVE_FEEDBACK_FROM_MID_STICK) != 0;
         bool thr_low;
-        if (flightmode->has_manual_throttle() || !sprung_throttle_stick) {
+        if (mode_has_manual_throttle(control_mode) || !sprung_throttle_stick) {
             thr_low = ap.throttle_zero;
         } else {
-            float deadband_top = get_throttle_mid() + g.throttle_deadzone;
+            float deadband_top = channel_throttle->get_control_mid() + g.throttle_deadzone;
             thr_low = channel_throttle->get_control_in() <= deadband_top;
         }
 
@@ -133,7 +120,7 @@ void Copter::auto_disarm_check()
 
 // init_arm_motors - performs arming process including initialisation of barometer and gyros
 //  returns false if arming failed because of pre-arm checks, arming checks or a gyro calibration failure
-bool Copter::init_arm_motors(const AP_Arming::ArmingMethod method, const bool do_arming_checks)
+bool Copter::init_arm_motors(bool arming_from_gcs)
 {
     static bool in_arm_motors = false;
 
@@ -150,7 +137,7 @@ bool Copter::init_arm_motors(const AP_Arming::ArmingMethod method, const bool do
     }
 
     // run pre-arm-checks and display failures
-    if (do_arming_checks && !arming.all_checks_passing(method)) {
+    if (!arming.all_checks_passing(arming_from_gcs)) {
         AP_Notify::events.arming_failed = true;
         in_arm_motors = false;
         return false;
@@ -162,11 +149,14 @@ bool Copter::init_arm_motors(const AP_Arming::ArmingMethod method, const bool do
     // disable cpu failsafe because initialising everything takes a while
     failsafe_disable();
 
+    // reset battery failsafe
+    set_failsafe_battery(false);
+
     // notify that arming will occur (we do this early to give plenty of warning)
     AP_Notify::flags.armed = true;
-    // call notify update a few times to ensure the message gets out
+    // call update_notify a few times to ensure the message gets out
     for (uint8_t i=0; i<=10; i++) {
-        notify.update();
+        update_notify();
     }
 
 #if HIL_MODE != HIL_MODE_DISABLED || CONFIG_HAL_BOARD == HAL_BOARD_SITL
@@ -179,32 +169,21 @@ bool Copter::init_arm_motors(const AP_Arming::ArmingMethod method, const bool do
 
     initial_armed_bearing = ahrs.yaw_sensor;
 
-    if (!ahrs.home_is_set()) {
+    if (ap.home_state == HOME_UNSET) {
         // Reset EKF altitude if home hasn't been set yet (we use EKF altitude as substitute for alt above home)
         ahrs.resetHeightDatum();
         Log_Write_Event(DATA_EKF_ALT_RESET);
-
-        // we have reset height, so arming height is zero
-        arming_altitude_m = 0;        
-    } else if (!ahrs.home_is_locked()) {
+    } else if (ap.home_state == HOME_SET_NOT_LOCKED) {
         // Reset home position if it has already been set before (but not locked)
         set_home_to_current_location(false);
-
-        // remember the height when we armed
-        arming_altitude_m = inertial_nav.get_altitude() * 0.01;
     }
-    update_super_simple_bearing(false);
-
-    // Reset SmartRTL return location. If activated, SmartRTL will ultimately try to land at this point
-#if MODE_SMARTRTL_ENABLED == ENABLED
-    g2.smart_rtl.set_home(position_ok());
-#endif
+    calc_distance_and_bearing();
 
     // enable gps velocity based centrefugal force compensation
     ahrs.set_correct_centrifugal(true);
     hal.util->set_soft_armed(true);
 
-#if SPRAYER_ENABLED == ENABLED
+#if SPRAYER == ENABLED
     // turn off sprayer's test if on
     sprayer.test_pump(false);
 #endif
@@ -225,7 +204,7 @@ bool Copter::init_arm_motors(const AP_Arming::ArmingMethod method, const bool do
     failsafe_enable();
 
     // perf monitor ignores delay due to arming
-    scheduler.perf_info.ignore_this_loop();
+    perf_ignore_this_loop();
 
     // flag exiting this function
     in_arm_motors = false;
@@ -236,9 +215,6 @@ bool Copter::init_arm_motors(const AP_Arming::ArmingMethod method, const bool do
     // Start the arming delay
     ap.in_arming_delay = true;
 
-    // assumed armed without a arming, switch. Overridden in switches.cpp
-    ap.armed_with_switch = false;
-    
     // return success
     return true;
 }
@@ -267,7 +243,7 @@ void Copter::init_disarm_motors()
 
 #if AUTOTUNE_ENABLED == ENABLED
     // save auto tuned parameters
-    mode_autotune.save_tuning_gains();
+    autotune_save_tuning_gains();
 #endif
 
     // we are not in the air
@@ -280,10 +256,8 @@ void Copter::init_disarm_motors()
     // send disarm command to motors
     motors->armed(false);
 
-#if MODE_AUTO_ENABLED == ENABLED
     // reset the mission
     mission.reset();
-#endif
 
     DataFlash_Class::instance()->set_vehicle_armed(false);
 
@@ -303,10 +277,7 @@ void Copter::motors_output()
     // OBC rules
     if (g2.afs.should_crash_vehicle()) {
         g2.afs.terminate_vehicle();
-        if (!g2.afs.terminating_vehicle_via_landing()) {
-            return;
-        }
-        // landing must continue to run the motors output
+        return;
     }
 #endif
 
@@ -319,7 +290,7 @@ void Copter::motors_output()
     SRV_Channels::calc_pwm();
 
     // cork now, so that all channel outputs happen at once
-    SRV_Channels::cork();
+    hal.rcout->cork();
 
     // update output on any aux channels, for manual passthru
     SRV_Channels::output_ch_all();
@@ -342,7 +313,7 @@ void Copter::motors_output()
     }
 
     // push all channels
-    SRV_Channels::push();
+    hal.rcout->push();
 }
 
 // check for pilot stick input to trigger lost vehicle alarm
@@ -351,7 +322,7 @@ void Copter::lost_vehicle_check()
     static uint8_t soundalarm_counter;
 
     // disable if aux switch is setup to vehicle alarm as the two could interfere
-    if (rc().find_channel_for_option(RC_Channel::aux_func::LOST_VEHICLE_SOUND)) {
+    if (check_if_auxsw_mode_used(AUXSW_LOST_COPTER_SOUND)) {
         return;
     }
 

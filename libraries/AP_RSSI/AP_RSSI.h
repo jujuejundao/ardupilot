@@ -25,20 +25,14 @@ public:
         RSSI_DISABLED           = 0,
         RSSI_ANALOG_PIN         = 1,
         RSSI_RC_CHANNEL_VALUE   = 2,
-        RSSI_RECEIVER           = 3,
-        RSSI_PWM_PIN            = 4
+        RSSI_RECEIVER           = 3
     };
 
+    // constructor
     AP_RSSI();
 
-    /* Do not allow copies */
-    AP_RSSI(const AP_RSSI &other) = delete;
-    AP_RSSI &operator=(const AP_RSSI&) = delete;
-
     // destructor
-    ~AP_RSSI(void);
-
-    static AP_RSSI *get_instance();
+    ~AP_RSSI(void);        
 
     // Initialize the rssi object and prepare it for use
     void init();
@@ -59,8 +53,6 @@ public:
 
 private:
 
-    static AP_RSSI *_s_instance;
-
     // RSSI parameters
     AP_Int8         rssi_type;                              // Type of RSSI being used
     AP_Int8         rssi_analog_pin;                        // Analog pin RSSI value found on
@@ -74,37 +66,12 @@ private:
     // a pin for reading the receiver RSSI voltage. 
     AP_HAL::AnalogSource *rssi_analog_source;
 
-    // PWM input
-    struct PWMState {
-        int8_t last_rssi_analog_pin; // last pin used for reading pwm (used to recognise change in pin assignment)
-        uint32_t last_reading_ms;      // system time of last read (used for health reporting)
-        float rssi_value;              // last calculated RSSI value
-        // the following two members are updated by the interrupt handler
-        uint32_t irq_value_us;         // last calculated pwm value (irq copy)
-        uint32_t pulse_start_us;       // system time of start of pulse
-    } pwm_state;
-
     // read the RSSI value from an analog pin - returns float in range 0.0 to 1.0
     float read_pin_rssi();
-
-    // check if pin has changed and configure interrupt handlers if required
-    void check_pwm_pin_rssi();
 
     // read the RSSI value from a PWM value on a RC channel
     float read_channel_rssi();
 
-    // read the PWM value from a pin
-    float read_pwm_pin_rssi();
-
-    // Scale and constrain a float rssi value to 0.0 to 1.0 range
+    // Scale and constrain a float rssi value to 0.0 to 1.0 range 
     float scale_and_constrain_float_rssi(float current_rssi_value, float low_rssi_range, float high_rssi_range);
-
-    // PWM input handling
-    void irq_handler(uint8_t pin,
-                     bool pin_state,
-                     uint32_t timestamp);
-};
-
-namespace AP {
-    AP_RSSI *rssi();
 };

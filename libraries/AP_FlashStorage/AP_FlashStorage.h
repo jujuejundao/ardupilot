@@ -45,7 +45,7 @@
 class AP_FlashStorage {
 private:
     static const uint8_t block_size = 8;
-    static const uint16_t num_blocks = HAL_STORAGE_SIZE / block_size;
+    static const uint16_t num_blocks = 2048;
     static const uint8_t max_write = 64;
 
 public:
@@ -72,9 +72,6 @@ public:
     // initialise storage, filling mem_buffer with current contents
     bool init(void);
 
-    // re-initialise storage, using current mem_buffer
-    bool re_initialise(void);
-    
     // switch full sector - should only be called when safe to have CPU
     // offline for considerable periods as an erase will be needed
     bool switch_full_sector(void);
@@ -138,7 +135,7 @@ private:
     bool erase_sector(uint8_t sector);
 
     // erase all sectors and reset
-    bool erase_all();
+    bool erase_all(void);
 
     // write all of mem_buffer to current sector
     bool write_all(void);

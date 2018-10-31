@@ -1,6 +1,5 @@
-from LogAnalyzer import Test, TestResult
+from LogAnalyzer import Test,TestResult
 import DataflashLog
-from VehicleType import VehicleType
 
 import math # for isnan()
 
@@ -44,17 +43,16 @@ class TestParams(Test):
         try:
             # add parameter checks below using the helper functions, any failures will trigger a FAIL status and accumulate info in statusMessage
             # if more complex checking or correlations are required you can access parameter values directly using the logdata.parameters[paramName] dict
-            if logdata.vehicleType == VehicleType.Copter:
+            if logdata.vehicleType == "ArduCopter":
                 self.__checkParamIsEqual   ("MAG_ENABLE",   1, logdata)
-                if "THR_MIN" in logdata.parameters:
-                    self.__checkParamIsLessThan("THR_MIN",    200, logdata)
-                    self.__checkParamIsLessThan("THR_MID",    701, logdata)
-                    self.__checkParamIsMoreThan("THR_MID",    299, logdata)
+                self.__checkParamIsLessThan("THR_MIN",    200, logdata)
+                self.__checkParamIsLessThan("THR_MID",    701, logdata)
+                self.__checkParamIsMoreThan("THR_MID",    299, logdata)
                 # TODO: add more parameter tests, these are just an example...
-            elif logdata.vehicleType == VehicleType.Plane:
+            elif logdata.vehicleType == "ArduPlane":
                 # TODO: add parameter checks for plane...
                 pass
-            elif logdata.vehicleType == VehicleType.Rover:
+            elif logdata.vehicleType == "ArduRover":
                 # TODO: add parameter checks for rover...
                 pass
 

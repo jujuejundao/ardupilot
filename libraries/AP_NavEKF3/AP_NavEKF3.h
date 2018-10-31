@@ -31,17 +31,13 @@
 class NavEKF3_core;
 class AP_AHRS;
 
-class NavEKF3 {
-    friend class NavEKF3_core;
-
+class NavEKF3
+{
 public:
-    NavEKF3(const AP_AHRS *ahrs, const RangeFinder &rng);
-
-    /* Do not allow copies */
-    NavEKF3(const NavEKF3 &other) = delete;
-    NavEKF3 &operator=(const NavEKF3&) = delete;
-
+    friend class NavEKF3_core;
     static const struct AP_Param::GroupInfo var_info[];
+
+    NavEKF3(const AP_AHRS *ahrs, AP_Baro &baro, const RangeFinder &rng);
 
     // allow logging to determine the number of active cores
     uint8_t activeCores(void) const {
@@ -72,38 +68,38 @@ public:
     // An out of range instance (eg -1) returns data for the the primary instance
     // If a calculated solution is not available, use the best available data and return false
     // If false returned, do not use for flight control
-    bool getPosNE(int8_t instance, Vector2f &posNE) const;
+    bool getPosNE(int8_t instance, Vector2f &posNE);
 
     // Write the last calculated D position relative to the reference point (m) for the specified instance.
     // An out of range instance (eg -1) returns data for the the primary instance
     // If a calculated solution is not available, use the best available data and return false
     // If false returned, do not use for flight control
-    bool getPosD(int8_t instance, float &posD) const;
+    bool getPosD(int8_t instance, float &posD);
 
     // return NED velocity in m/s for the specified instance
     // An out of range instance (eg -1) returns data for the the primary instance
-    void getVelNED(int8_t instance, Vector3f &vel) const;
+    void getVelNED(int8_t instance, Vector3f &vel);
 
     // Return the rate of change of vertical position in the down direction (dPosD/dt) in m/s for the specified instance
     // An out of range instance (eg -1) returns data for the the primary instance
     // This can be different to the z component of the EKF velocity state because it will fluctuate with height errors and corrections in the EKF
     // but will always be kinematically consistent with the z component of the EKF position state
-    float getPosDownDerivative(int8_t instance) const;
+    float getPosDownDerivative(int8_t instance);
 
     // This returns the specific forces in the NED frame
     void getAccelNED(Vector3f &accelNED) const;
 
     // return body axis gyro bias estimates in rad/sec for the specified instance
     // An out of range instance (eg -1) returns data for the the primary instance
-    void getGyroBias(int8_t instance, Vector3f &gyroBias) const;
+    void getGyroBias(int8_t instance, Vector3f &gyroBias);
 
     // return accelerometer bias estimate in m/s/s
     // An out of range instance (eg -1) returns data for the the primary instance
-    void getAccelBias(int8_t instance, Vector3f &accelBias) const;
+    void getAccelBias(int8_t instance, Vector3f &accelBias);
 
     // return tilt error convergence metric for the specified instance
     // An out of range instance (eg -1) returns data for the the primary instance
-    void getTiltError(int8_t instance, float &ang) const;
+    void getTiltError(int8_t instance, float &ang);
 
     // reset body axis gyro bias estimates
     void resetGyroBias(void);
@@ -123,7 +119,7 @@ public:
 
     // Set the argument to true to prevent the EKF using the GPS vertical velocity
     // This can be used for situations where GPS velocity errors are causing problems with height accuracy
-    void setInhibitGpsVertVelUse(const bool varIn) { inhibitGpsVertVelUse = varIn; };
+    void setGpsVertVelUse(const bool varIn) { inhibitGpsVertVelUse = varIn; };
 
     // return the horizontal speed limit in m/s set by optical flow sensor limits
     // return the scale factor to be applied to navigation velocity gains to compensate for increase in velocity noise with height when using optical flow
@@ -131,19 +127,19 @@ public:
 
     // return the NED wind speed estimates in m/s (positive is air moving in the direction of the axis)
     // An out of range instance (eg -1) returns data for the the primary instance
-    void getWind(int8_t instance, Vector3f &wind) const;
+    void getWind(int8_t instance, Vector3f &wind);
 
     // return earth magnetic field estimates in measurement units / 1000 for the specified instance
     // An out of range instance (eg -1) returns data for the the primary instance
-    void getMagNED(int8_t instance, Vector3f &magNED) const;
+    void getMagNED(int8_t instance, Vector3f &magNED);
 
     // return body magnetic field estimates in measurement units / 1000 for the specified instance
     // An out of range instance (eg -1) returns data for the the primary instance
-    void getMagXYZ(int8_t instance, Vector3f &magXYZ) const;
+    void getMagXYZ(int8_t instance, Vector3f &magXYZ);
 
     // return the magnetometer in use for the specified instance
     // An out of range instance (eg -1) returns data for the the primary instance
-    uint8_t getActiveMag(int8_t instance) const;
+    uint8_t getActiveMag(int8_t instance);
 
     // Return estimated magnetometer offsets
     // Return true if magnetometer offsets are valid
@@ -173,7 +169,7 @@ public:
 
     // return the Euler roll, pitch and yaw angle in radians for the specified instance
     // An out of range instance (eg -1) returns data for the the primary instance
-    void getEulerAngles(int8_t instance, Vector3f &eulers) const;
+    void getEulerAngles(int8_t instance, Vector3f &eulers);
 
     // return the transformation matrix from XYZ (body) to NED axes
     void getRotationBodyToNED(Matrix3f &mat) const;
@@ -183,17 +179,17 @@ public:
 
     // return the innovations for the specified instance
     // An out of range instance (eg -1) returns data for the the primary instance
-    void getInnovations(int8_t index, Vector3f &velInnov, Vector3f &posInnov, Vector3f &magInnov, float &tasInnov, float &yawInnov) const;
+    void getInnovations(int8_t index, Vector3f &velInnov, Vector3f &posInnov, Vector3f &magInnov, float &tasInnov, float &yawInnov);
 
     // publish output observer angular, velocity and position tracking error
     void getOutputTrackingError(int8_t instance, Vector3f &error) const;
 
     // return the innovation consistency test ratios for the specified instance
     // An out of range instance (eg -1) returns data for the the primary instance
-    void getVariances(int8_t instance, float &velVar, float &posVar, float &hgtVar, Vector3f &magVar, float &tasVar, Vector2f &offset) const;
+    void getVariances(int8_t instance, float &velVar, float &posVar, float &hgtVar, Vector3f &magVar, float &tasVar, Vector2f &offset);
 
     // return the diagonals from the covariance matrix for the specified instance
-    void getStateVariances(int8_t instance, float stateVar[24]) const;
+    void getStateVariances(int8_t instance, float stateVar[24]);
 
     // should we use the compass? This is public so it can be used for
     // reporting via ahrs.use_compass()
@@ -206,7 +202,7 @@ public:
     // The sign convention is that a RH physical rotation of the sensor about an axis produces both a positive flow and gyro rate
     // msecFlowMeas is the scheduler time in msec when the optical flow data was received from the sensor.
     // posOffset is the XYZ flow sensor position in the body frame in m
-    void writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f &rawFlowRates, const Vector2f &rawGyroRates, const uint32_t msecFlowMeas, const Vector3f &posOffset);
+    void writeOptFlowMeas(uint8_t &rawFlowQuality, Vector2f &rawFlowRates, Vector2f &rawGyroRates, uint32_t &msecFlowMeas, const Vector3f &posOffset);
 
     /*
      * Write body frame linear and angular displacement measurements from a visual odometry sensor
@@ -239,11 +235,11 @@ public:
      *
      * Return the system time stamp of the last update (msec)
      */
-    uint32_t getBodyFrameOdomDebug(int8_t instance, Vector3f &velInnov, Vector3f &velInnovVar) const;
+    uint32_t getBodyFrameOdomDebug(int8_t instance, Vector3f &velInnov, Vector3f &velInnovVar);
 
     // return data for debugging optical flow fusion for the specified instance
     // An out of range instance (eg -1) returns data for the the primary instance
-    void getFlowDebug(int8_t instance, float &varFlow, float &gndOffset, float &flowInnovX, float &flowInnovY, float &auxInnov, float &HAGL, float &rngInnov, float &range, float &gndOffsetErr) const;
+    void getFlowDebug(int8_t instance, float &varFlow, float &gndOffset, float &flowInnovX, float &flowInnovY, float &auxInnov, float &HAGL, float &rngInnov, float &range, float &gndOffsetErr);
 
     /*
         Returns the following data for debugging range beacon fusion
@@ -260,7 +256,7 @@ public:
         returns true if data could be found, false if it could not
     */
     bool getRangeBeaconDebug(int8_t instance, uint8_t &ID, float &rng, float &innov, float &innovVar, float &testRatio, Vector3f &beaconPosNED,
-                             float &offsetHigh, float &offsetLow, Vector3f &posNED) const;
+                             float &offsetHigh, float &offsetLow, Vector3f &posNED);
 
     // called by vehicle code to specify that a takeoff is happening
     // causes the EKF to compensate for expected barometer errors due to ground effect
@@ -287,7 +283,7 @@ public:
      7 = badly conditioned synthetic sideslip fusion
      7 = filter is not initialised
     */
-    void getFilterFaults(int8_t instance, uint16_t &faults) const;
+    void getFilterFaults(int8_t instance, uint16_t &faults);
 
     /*
     return filter timeout status as a bitmasked integer for the specified instance
@@ -301,19 +297,19 @@ public:
      7 = unassigned
      7 = unassigned
     */
-    void getFilterTimeouts(int8_t instance, uint8_t &timeouts) const;
+    void getFilterTimeouts(int8_t instance, uint8_t &timeouts);
 
     /*
     return filter gps quality check status for the specified instance
     An out of range instance (eg -1) returns data for the the primary instance
     */
-    void getFilterGpsStatus(int8_t instance, nav_gps_status &faults) const;
+    void getFilterGpsStatus(int8_t instance, nav_gps_status &faults);
 
     /*
     return filter status flags for the specified instance
     An out of range instance (eg -1) returns data for the the primary instance
     */
-    void getFilterStatus(int8_t instance, nav_filter_status &status) const;
+    void getFilterStatus(int8_t instance, nav_filter_status &status);
 
     // send an EKF_STATUS_REPORT message to GCS
     void send_status_report(mavlink_channel_t chan);
@@ -352,13 +348,14 @@ public:
     bool have_ekf_logging(void) const { return logging.enabled && _logging_mask != 0; }
 
     // get timing statistics structure
-    void getTimingStatistics(int8_t instance, struct ekf_timing &timing) const;
-
+    void getTimingStatistics(int8_t instance, struct ekf_timing &timing);
+    
 private:
     uint8_t num_cores; // number of allocated cores
     uint8_t primary;   // current primary core
     NavEKF3_core *core = nullptr;
     const AP_AHRS *_ahrs;
+    AP_Baro &_baro;
     const RangeFinder &_rng;
 
     uint32_t _frameTimeUsec;        // time per IMU frame
@@ -419,33 +416,33 @@ private:
 
 
     // Tuning parameters
-    const float gpsNEVelVarAccScale = 0.05f;       // Scale factor applied to NE velocity measurement variance due to manoeuvre acceleration
-    const float gpsDVelVarAccScale = 0.07f;        // Scale factor applied to vertical velocity measurement variance due to manoeuvre acceleration
-    const float gpsPosVarAccScale = 0.05f;         // Scale factor applied to horizontal position measurement variance due to manoeuvre acceleration
-    const uint16_t magDelay_ms = 60;               // Magnetometer measurement delay (msec)
-    const uint16_t tasDelay_ms = 100;              // Airspeed measurement delay (msec)
-    const uint16_t tiltDriftTimeMax_ms = 15000;    // Maximum number of ms allowed without any form of tilt aiding (GPS, flow, TAS, etc)
-    const uint16_t posRetryTimeUseVel_ms = 10000;  // Position aiding retry time with velocity measurements (msec)
-    const uint16_t posRetryTimeNoVel_ms = 7000;    // Position aiding retry time without velocity measurements (msec)
-    const uint16_t hgtRetryTimeMode0_ms = 10000;   // Height retry time with vertical velocity measurement (msec)
-    const uint16_t hgtRetryTimeMode12_ms = 5000;   // Height retry time without vertical velocity measurement (msec)
-    const uint16_t tasRetryTime_ms = 5000;         // True airspeed timeout and retry interval (msec)
-    const uint32_t magFailTimeLimit_ms = 10000;    // number of msec before a magnetometer failing innovation consistency checks is declared failed (msec)
-    const float magVarRateScale = 0.005f;          // scale factor applied to magnetometer variance due to angular rate
-    const float gyroBiasNoiseScaler = 2.0f;        // scale factor applied to gyro bias state process noise when on ground
-    const uint16_t hgtAvg_ms = 100;                // average number of msec between height measurements
-    const uint16_t betaAvg_ms = 100;               // average number of msec between synthetic sideslip measurements
-    const float covTimeStepMax = 0.1f;             // maximum time (sec) between covariance prediction updates
-    const float covDelAngMax = 0.05f;              // maximum delta angle between covariance prediction updates
-    const float DCM33FlowMin = 0.71f;              // If Tbn(3,3) is less than this number, optical flow measurements will not be fused as tilt is too high.
-    const float fScaleFactorPnoise = 1e-10f;       // Process noise added to focal length scale factor state variance at each time step
-    const uint8_t flowTimeDeltaAvg_ms = 100;       // average interval between optical flow measurements (msec)
-    const uint32_t flowIntervalMax_ms = 100;       // maximum allowable time between flow fusion events
-    const uint16_t gndEffectTimeout_ms = 1000;     // time in msec that ground effect mode is active after being activated
-    const float gndEffectBaroScaler = 4.0f;        // scaler applied to the barometer observation variance when ground effect mode is active
-    const uint8_t gndGradientSigma = 50;           // RMS terrain gradient percentage assumed by the terrain height estimation
-    const uint16_t fusionTimeStep_ms = 10;         // The minimum time interval between covariance predictions and measurement fusions in msec
-    const uint8_t sensorIntervalMin_ms = 50;       // The minimum allowed time between measurements from any non-IMU sensor (msec)
+    const float gpsNEVelVarAccScale;    // Scale factor applied to NE velocity measurement variance due to manoeuvre acceleration
+    const float gpsDVelVarAccScale;     // Scale factor applied to vertical velocity measurement variance due to manoeuvre acceleration
+    const float gpsPosVarAccScale;      // Scale factor applied to horizontal position measurement variance due to manoeuvre acceleration
+    const uint16_t magDelay_ms;         // Magnetometer measurement delay (msec)
+    const uint16_t tasDelay_ms;         // Airspeed measurement delay (msec)
+    const uint16_t tiltDriftTimeMax_ms;    // Maximum number of ms allowed without any form of tilt aiding (GPS, flow, TAS, etc)
+    const uint16_t posRetryTimeUseVel_ms;  // Position aiding retry time with velocity measurements (msec)
+    const uint16_t posRetryTimeNoVel_ms;   // Position aiding retry time without velocity measurements (msec)
+    const uint16_t hgtRetryTimeMode0_ms;   // Height retry time with vertical velocity measurement (msec)
+    const uint16_t hgtRetryTimeMode12_ms;  // Height retry time without vertical velocity measurement (msec)
+    const uint16_t tasRetryTime_ms;     // True airspeed timeout and retry interval (msec)
+    const uint32_t magFailTimeLimit_ms; // number of msec before a magnetometer failing innovation consistency checks is declared failed (msec)
+    const float magVarRateScale;        // scale factor applied to magnetometer variance due to angular rate
+    const float gyroBiasNoiseScaler;    // scale factor applied to gyro bias state process noise when on ground
+    const uint16_t hgtAvg_ms;           // average number of msec between height measurements
+    const uint16_t betaAvg_ms;          // average number of msec between synthetic sideslip measurements
+    const float covTimeStepMax;         // maximum time (sec) between covariance prediction updates
+    const float covDelAngMax;           // maximum delta angle between covariance prediction updates
+    const float DCM33FlowMin;           // If Tbn(3,3) is less than this number, optical flow measurements will not be fused as tilt is too high.
+    const float fScaleFactorPnoise;     // Process noise added to focal length scale factor state variance at each time step
+    const uint8_t flowTimeDeltaAvg_ms;  // average interval between optical flow measurements (msec)
+    const uint32_t flowIntervalMax_ms;  // maximum allowable time between flow fusion events
+    const uint16_t gndEffectTimeout_ms; // time in msec that ground effect mode is active after being activated
+    const float gndEffectBaroScaler;    // scaler applied to the barometer observation variance when ground effect mode is active
+    const uint8_t gndGradientSigma;     // RMS terrain gradient percentage assumed by the terrain height estimation
+    const uint16_t fusionTimeStep_ms;   // The minimum time interval between covariance predictions and measurement fusions in msec
+    const uint8_t sensorIntervalMin_ms; // The minimum allowed time between measurements from any non-IMU sensor (msec)
 
     struct {
         bool enabled:1;

@@ -56,7 +56,6 @@ public:
 
     // accessors
     AP_Float    &kP() { return _kp; }
-    const AP_Float &kP() const { return _kp; }
     void        kP(const float v) { _kp.set(v); }
 
     static const struct AP_Param::GroupInfo        var_info[];

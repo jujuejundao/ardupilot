@@ -28,10 +28,13 @@
 #pragma once
 
 #include <AP_HAL/AP_HAL.h>
-
-#if AP_MODULE_SUPPORTED
-
 #include <AP_AHRS/AP_AHRS.h>
+
+#ifdef HAVE_LIBDL
+#define AP_MODULE_SUPPORTED 1
+#else
+#define AP_MODULE_SUPPORTED 0
+#endif
 
 #ifndef AP_MODULE_DEFAULT_DIRECTORY
 #define AP_MODULE_DEFAULT_DIRECTORY "/usr/lib/ardupilot/modules"
@@ -87,5 +90,3 @@ private:
     // scan a module for hooks
     static void module_scan(const char *path);
 };
-
-#endif // AP_MODULE_SUPPORTED

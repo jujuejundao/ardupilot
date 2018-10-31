@@ -19,6 +19,14 @@
 
 #include <AP_HAL/AP_HAL.h>
 
+#if CONFIG_HAL_BOARD == HAL_BOARD_VRBRAIN
+ # define BUZZER_PIN    32
+#elif CONFIG_HAL_BOARD == HAL_BOARD_LINUX && CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BBBMINI
+ # define BUZZER_PIN     11 // GPIO P8_32
+#else
+ # define BUZZER_PIN     0 // pin undefined on other boards
+#endif
+
 #define BUZZER_ARMING_BUZZ_MS   3000    // arming buzz length in milliseconds (i.e. 3 seconds)
 
 #include "NotifyDevice.h"
@@ -27,7 +35,12 @@ class Buzzer: public NotifyDevice
 {
 public:
     /// Constructor
-    Buzzer() {}
+    Buzzer() :
+        _counter(0),
+        _pattern(NONE),
+        _pattern_counter(0),
+        _arming_buzz_start_ms(0)
+    {}
 
     /// init - initialise the buzzer
     bool init(void);
@@ -67,5 +80,4 @@ private:
     BuzzerPattern   _pattern;           // current pattern
     uint8_t         _pattern_counter;   // used to time on/off of current patter
     uint32_t        _arming_buzz_start_ms;  // arming_buzz start time in milliseconds
-    uint8_t         _pin;
 };

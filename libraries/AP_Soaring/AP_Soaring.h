@@ -29,6 +29,7 @@ class SoaringController {
     ExtendedKalmanFilter _ekf{};
     AP_AHRS &_ahrs;
     AP_SpdHgtControl &_spdHgt;
+    const AP_Vehicle::FixedWing &_aparm;
     Variometer _vario;
 
     // store aircraft location at last update
@@ -90,7 +91,7 @@ public:
     {
         _throttle_suppressed = suppressed;
     }
-    float get_vario_reading() const
+    float get_vario_reading()
     {
         return _vario.displayed_reading;
     }

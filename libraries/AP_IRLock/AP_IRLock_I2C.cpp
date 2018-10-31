@@ -43,6 +43,8 @@ void AP_IRLock_I2C::init(int8_t bus)
         return;
     }
 
+    sem = hal.util->new_semaphore();
+
     // read at 50Hz
     printf("Starting IRLock on I2C\n");
 
@@ -130,15 +132,14 @@ void AP_IRLock_I2C::read_frames(void)
     pixel_to_1M_plane(corner1_pix_x, corner1_pix_y, corner1_pos_x, corner1_pos_y);
     pixel_to_1M_plane(corner2_pix_x, corner2_pix_y, corner2_pos_x, corner2_pos_y);
 
-    {
-        WITH_SEMAPHORE(sem);
-
+    if (sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
         /* convert to angles */
         _target_info.timestamp = AP_HAL::millis();
         _target_info.pos_x = 0.5f*(corner1_pos_x+corner2_pos_x);
         _target_info.pos_y = 0.5f*(corner1_pos_y+corner2_pos_y);
         _target_info.size_x = corner2_pos_x-corner1_pos_x;
         _target_info.size_y = corner2_pos_y-corner1_pos_y;
+        sem->give();
     }
 
 #if 0
@@ -157,17 +158,17 @@ void AP_IRLock_I2C::read_frames(void)
 bool AP_IRLock_I2C::update()
 {
     bool new_data = false;
-    if (!dev) {
+    if (!dev || !sem) {
         return false;
     }
-    WITH_SEMAPHORE(sem);
-
-    if (_last_update_ms != _target_info.timestamp) {
-        new_data = true;
+    if (sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+        if (_last_update_ms != _target_info.timestamp) {
+            new_data = true;
+        }
+        _last_update_ms = _target_info.timestamp;
+        _flags.healthy = (AP_HAL::millis() - _last_read_ms < 100);
+        sem->give();
     }
-    _last_update_ms = _target_info.timestamp;
-    _flags.healthy = (AP_HAL::millis() - _last_read_ms < 100);
-
     // return true if new data found
     return new_data;
 }

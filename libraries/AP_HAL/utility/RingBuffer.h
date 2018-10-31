@@ -133,14 +133,6 @@ public:
         return buffer->write((uint8_t*)&object, sizeof(T)) == sizeof(T);
     }
 
-    // push N objects
-    bool push(const T *object, uint32_t n) {
-        if (buffer->space() < n*sizeof(T)) {
-            return false;
-        }
-        return buffer->write((uint8_t*)object, n*sizeof(T)) == n*sizeof(T);
-    }
-    
     /*
       throw away an object
      */
@@ -171,17 +163,6 @@ public:
     }
 
     /*
-     * push_force() N objects
-     */
-    bool push_force(const T *object, uint32_t n) {
-        uint32_t _space = buffer->space();
-        if (_space < sizeof(T)*n) {
-            buffer->advance(sizeof(T)*(n-_space));
-        }
-        return push(object, n);
-    }
-    
-    /*
       peek copies an object out without advancing the read pointer
      */
     bool peek(T &object) {
@@ -208,33 +189,28 @@ private:
 template <class T>
 class ObjectArray {
 public:
-    ObjectArray(uint16_t size_) {
-        _size = size_;
-        _head = _count = 0;
-        _buffer = new T[_size];
+    ObjectArray(uint16_t _size) {
+        size = _size;
+        head = count = 0;
+        buffer = new T[size];
     }
     ~ObjectArray(void) {
-        delete[] _buffer;
-    }
-
-    // return total number of objects
-    uint16_t size(void) const {
-        return _size;
+        delete[] buffer;
     }
 
     // return number of objects available to be read
     uint16_t available(void) const {
-        return _count;
+        return count;
     }
 
     // return number of objects that could be written
     uint16_t space(void) const {
-        return _size - _count;
+        return size - count;
     }
 
     // true is available() == 0
     bool empty(void) const {
-        return _count == 0;
+        return count == 0;
     }
 
     // push one object
@@ -242,8 +218,8 @@ public:
         if (space() == 0) {
             return false;
         }
-        _buffer[(_head+_count)%_size] = object;
-        _count++;
+        buffer[(head+count)%size] = object;
+        count++;
         return true;
     }
 
@@ -254,15 +230,15 @@ public:
         if (empty()) {
             return false;
         }
-        _head = (_head+1) % _size;
-        _count--;
+        head = (head+1) % size;
+        count--;
         return true;
     }
 
     // Discards the buffer content, emptying it.
     void clear(void)
     {
-        _head = _count = 0;
+        head = count = 0;
     }
 
     /*
@@ -272,7 +248,7 @@ public:
         if (empty()) {
             return false;
         }
-        object = _buffer[_head];
+        object = buffer[head];
         return pop();
     }
 
@@ -292,12 +268,12 @@ public:
       remove the Nth element from the array. First element is zero
      */
     bool remove(uint16_t n) {
-        if (n >= _count) {
+        if (n >= count) {
             return false;
         }
-        if (n == _count-1) {
+        if (n == count-1) {
             // remove last element
-            _count--;
+            count--;
             return true;
         }
         if (n == 0) {
@@ -305,25 +281,25 @@ public:
             return pop();
         }
         // take advantage of the [] operator for simple shift of the array elements
-        for (uint16_t i=n; i<_count-1; i++) {
+        for (uint16_t i=n; i<count-1; i++) {
             *(*this)[i] = *(*this)[i+1];
         }
-        _count--;
+        count--;
         return true;
     }
 
     // allow array indexing, based on current head. Returns a pointer
     // to the object or nullptr
     T * operator[](uint16_t i) {
-        if (i >= _count) {
+        if (i >= count) {
             return nullptr;
         }
-        return &_buffer[(_head+i)%_size];
+        return &buffer[(head+i)%size];
     }
 
 private:
-    T *_buffer;
-    uint16_t _size;  // total buffer size
-    uint16_t _count; // number in buffer now
-    uint16_t _head;  // first element
+    T *buffer;
+    uint16_t size;  // total buffer size
+    uint16_t count; // number in buffer now
+    uint16_t head;  // first element
 };

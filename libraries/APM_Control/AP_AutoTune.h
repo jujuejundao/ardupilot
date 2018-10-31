@@ -90,6 +90,7 @@ private:
     void check_state_exit(uint32_t state_time_ms);
     void save_gains(const ATGains &v);
 
+    void write_log_headers(void);
     void write_log(float servo, float demanded, float achieved);
 
     void log_param_change(float v, const char *suffix);

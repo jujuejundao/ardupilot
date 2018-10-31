@@ -86,7 +86,7 @@ void AP_GPS_Backend::make_gps_time(uint32_t bcd_date, uint32_t bcd_milliseconds)
     msec = v % 1000; v /= 1000;
     sec  = v % 100; v /= 100;
     min  = v % 100; v /= 100;
-    hour = v % 100;
+    hour = v % 100; v /= 100;
 
     int8_t rmon = mon - 2;
     if (0 >= rmon) {    
@@ -158,61 +158,29 @@ void AP_GPS_Backend::_detection_message(char *buffer, const uint8_t buflen) cons
 
 void AP_GPS_Backend::broadcast_gps_type() const
 {
-    char buffer[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
+    char buffer[64];
     _detection_message(buffer, sizeof(buffer));
     gcs().send_text(MAV_SEVERITY_INFO, buffer);
 }
 
 void AP_GPS_Backend::Write_DataFlash_Log_Startup_messages() const
 {
-    char buffer[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
+    char buffer[64];
     _detection_message(buffer, sizeof(buffer));
     DataFlash_Class::instance()->Log_Write_Message(buffer);
 }
 
 bool AP_GPS_Backend::should_df_log() const
 {
-    return gps.should_df_log();
-}
-
-
-void AP_GPS_Backend::send_mavlink_gps_rtk(mavlink_channel_t chan)
-{
-    const uint8_t instance = state.instance;
-    // send status
-    switch (instance) {
-        case 0:
-            mavlink_msg_gps_rtk_send(chan,
-                                 0,  // Not implemented yet
-                                 0,  // Not implemented yet
-                                 state.rtk_week_number,
-                                 state.rtk_time_week_ms,
-                                 0,  // Not implemented yet
-                                 0,  // Not implemented yet
-                                 state.rtk_num_sats,
-                                 state.rtk_baseline_coords_type,
-                                 state.rtk_baseline_x_mm,
-                                 state.rtk_baseline_y_mm,
-                                 state.rtk_baseline_z_mm,
-                                 state.rtk_accuracy,
-                                 state.rtk_iar_num_hypotheses);
-            break;
-        case 1:
-            mavlink_msg_gps2_rtk_send(chan,
-                                 0,  // Not implemented yet
-                                 0,  // Not implemented yet
-                                 state.rtk_week_number,
-                                 state.rtk_time_week_ms,
-                                 0,  // Not implemented yet
-                                 0,  // Not implemented yet
-                                 state.rtk_num_sats,
-                                 state.rtk_baseline_coords_type,
-                                 state.rtk_baseline_x_mm,
-                                 state.rtk_baseline_y_mm,
-                                 state.rtk_baseline_z_mm,
-                                 state.rtk_accuracy,
-                                 state.rtk_iar_num_hypotheses);
-            break;
+    DataFlash_Class *instance = DataFlash_Class::instance();
+    if (instance == nullptr) {
+        return false;
     }
+    if (gps._log_gps_bit == (uint32_t)-1) {
+        return false;
+    }
+    if (!instance->should_log(gps._log_gps_bit)) {
+        return false;
+    }
+    return true;
 }
-

@@ -21,30 +21,17 @@
 
 #include "AP_Notify.h"
 
-#ifndef HAL_BUZZER_ON
- #define HAL_BUZZER_ON 1
- #define HAL_BUZZER_OFF 0 
-#endif
-
-
-
 extern const AP_HAL::HAL& hal;
-
 
 bool Buzzer::init()
 {
-    if (pNotify->buzzer_enabled() == false) {
+    // return immediately if disabled
+    if (!AP_Notify::flags.external_leds) {
         return false;
     }
-#if defined(HAL_BUZZER_PIN)
-    _pin = HAL_BUZZER_PIN;
-#else
-    _pin = pNotify->get_buzz_pin();
-#endif
-    if(!_pin) return false;
 
     // setup the pin and ensure it's off
-    hal.gpio->pinMode(_pin, HAL_GPIO_OUTPUT);
+    hal.gpio->pinMode(BUZZER_PIN, HAL_GPIO_OUTPUT);
     on(false);
 
     // set initial boot states. This prevents us issuing a arming
@@ -57,6 +44,11 @@ bool Buzzer::init()
 // update - updates led according to timed_updated.  Should be called at 50Hz
 void Buzzer::update()
 {
+    // return immediately if disabled
+    if (!AP_Notify::flags.external_leds) {
+        return;
+    }
+
     // check for arming failed event
     if (AP_Notify::events.arming_failed) {
         // arming failed buzz
@@ -216,7 +208,7 @@ void Buzzer::on(bool turn_on)
     _flags.on = turn_on;
 
     // pull pin high or low
-    hal.gpio->write(_pin, _flags.on? HAL_BUZZER_ON : HAL_BUZZER_OFF);
+    hal.gpio->write(BUZZER_PIN, _flags.on);
 }
 
 /// play_pattern - plays the defined buzzer pattern
@@ -225,4 +217,3 @@ void Buzzer::play_pattern(BuzzerPattern pattern_id)
     _pattern = pattern_id;
     _pattern_counter = 0;
 }
-

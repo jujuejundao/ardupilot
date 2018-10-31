@@ -49,8 +49,6 @@ QuadPlane::QuadPlane(const char *home_str, const char *frame_str) :
         frame_type = "tilttrivec";
         // fwd motor gives zero thrust
         thrust_scale = 0;
-    } else if (strstr(frame_str, "-tilthvec")) {
-        frame_type = "tilthvec";
     } else if (strstr(frame_str, "-tilttri")) {
         frame_type = "tilttri";
         // fwd motor gives zero thrust

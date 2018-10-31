@@ -25,54 +25,38 @@
 #include <cmath>
 
 #include <AP_HAL/AP_HAL.h>
-#include <AP_HAL/utility/RingBuffer.h>
 #include <StorageManager/StorageManager.h>
 
 #include "float.h"
 
 #define AP_MAX_NAME_SIZE 16
 
-// optionally enable debug code for dumping keys
-#define AP_PARAM_KEY_DUMP 0
-
-/*
-  maximum size of embedded parameter file
- */
-#ifndef AP_PARAM_MAX_EMBEDDED_PARAM
-#define AP_PARAM_MAX_EMBEDDED_PARAM 8192
-#endif
-
 /*
   flags for variables in var_info and group tables
  */
 
 // a nested offset is for subgroups that are not subclasses
-#define AP_PARAM_FLAG_NESTED_OFFSET (1<<0)
+#define AP_PARAM_FLAG_NESTED_OFFSET 1
 
 // a pointer variable is for dynamically allocated objects
-#define AP_PARAM_FLAG_POINTER       (1<<1)
+#define AP_PARAM_FLAG_POINTER       2
 
 // an enable variable allows a whole subtree of variables to be made
 // invisible
-#define AP_PARAM_FLAG_ENABLE        (1<<2)
+#define AP_PARAM_FLAG_ENABLE        4
 
 // don't shift index 0 to index 63. Use this when you know there will be
 // no conflict with the parent
-#define AP_PARAM_NO_SHIFT           (1<<3)
+#define AP_PARAM_NO_SHIFT           8
 
 // the var_info is a pointer, allowing for dynamic definition of the var_info tree
-#define AP_PARAM_FLAG_INFO_POINTER  (1<<4)
-
-// ignore the enable parameter on this group
-#define AP_PARAM_FLAG_IGNORE_ENABLE (1<<5)
-
-// keep all flags before the FRAME tags
+#define AP_PARAM_FLAG_INFO_POINTER  16
 
 // vehicle and frame type flags, used to hide parameters when not
 // relevent to a vehicle type. Use AP_Param::set_frame_type_flags() to
 // enable parameters flagged in this way. frame type flags are stored
 // in flags field, shifted by AP_PARAM_FRAME_TYPE_SHIFT.
-#define AP_PARAM_FRAME_TYPE_SHIFT   6
+#define AP_PARAM_FRAME_TYPE_SHIFT   5
 
 // supported frame types for parameters
 #define AP_PARAM_FRAME_COPTER       (1<<0)
@@ -108,7 +92,6 @@
 // declare a subgroup entry in a group var_info. This is for having another arbitrary object as a member of the parameter list of
 // an object
 #define AP_SUBGROUPINFO(element, name, idx, thisclazz, elclazz) { AP_PARAM_GROUP, idx, name, AP_VAROFFSET(thisclazz, element), { group_info : elclazz::var_info }, AP_PARAM_FLAG_NESTED_OFFSET }
-#define AP_SUBGROUPINFO_FLAGS(element, name, idx, thisclazz, elclazz, flags) { AP_PARAM_GROUP, idx, name, AP_VAROFFSET(thisclazz, element), { group_info : elclazz::var_info }, AP_PARAM_FLAG_NESTED_OFFSET | flags }
 
 // declare a second parameter table for the same object
 #define AP_SUBGROUPEXTENSION(name, idx, clazz, vinfo) { AP_PARAM_GROUP, idx, name, 0, { group_info : clazz::vinfo }, AP_PARAM_FLAG_NESTED_OFFSET }
@@ -257,20 +240,6 @@ public:
     /// @return                 true if the variable is found
     static bool set_default_by_name(const char *name, float value);
     
-    /// set a value by name
-    ///
-    /// @param  name            The full name of the variable to be found.
-    /// @param  value           The new value
-    /// @return                 true if the variable is found
-    static bool set_by_name(const char *name, float value);
-
-    /// set and save a value by name
-    ///
-    /// @param  name            The full name of the variable to be found.
-    /// @param  value           The new value
-    /// @return                 true if the variable is found
-    static bool set_and_save_by_name(const char *name, float value);
-
     /// Find a variable by index.
     ///
     ///
@@ -302,24 +271,14 @@ public:
     ///
     void notify() const;
     
-    /// Save the current value of the variable to storage, synchronous API
+    /// Save the current value of the variable to EEPROM.
     ///
     /// @param  force_save     If true then force save even if default
     ///
     /// @return                True if the variable was saved successfully.
     ///
-    void save_sync(bool force_save=false);
+    bool save(bool force_save=false);
 
-    /// flush all pending parameter saves
-    /// used on reboot
-    static void flush(void);
-    
-    /// Save the current value of the variable to storage, async interface
-    ///
-    /// @param  force_save     If true then force save even if default
-    ///
-    void save(bool force_save=false);
-    
     /// Load the variable from EEPROM.
     ///
     /// @return                True if the variable was loaded successfully.
@@ -334,11 +293,11 @@ public:
     ///
     /// @return                False if any variable failed to load
     ///
-    static bool load_all();
+    static bool load_all(bool check_defaults_file=true);
 
     /// reoad the hal.util defaults file. Called after pointer parameters have been allocated
     ///
-    static void reload_defaults_file(bool last_pass);
+    static void reload_defaults_file(bool panic_on_error=true);
     
     static void load_object_from_eeprom(const void *object_pointer, const struct GroupInfo *group_info);
     
@@ -427,23 +386,6 @@ public:
 
     // check if a given frame type should be included
     static bool check_frame_type(uint16_t flags);
-
-#if AP_PARAM_KEY_DUMP
-    /// print the value of all variables
-    static void         show_all(AP_HAL::BetterStream *port, bool showKeyValues=false);
-
-    /// print the value of one variable
-    static void         show(const AP_Param *param, 
-                             const char *name,
-                             enum ap_var_type ptype, 
-                             AP_HAL::BetterStream *port);
-
-    /// print the value of one variable
-    static void         show(const AP_Param *param, 
-                             const ParamToken &token,
-                             enum ap_var_type ptype, 
-                             AP_HAL::BetterStream *port);
-#endif // AP_PARAM_KEY_DUMP
     
 private:
     /// EEPROM header
@@ -487,19 +429,6 @@ private:
 
     static uint16_t             _frame_type_flags;
 
-    /*
-      structure for built-in defaults file that can be modified using apj_tool.py
-     */
-    struct PACKED param_defaults_struct {
-        char magic_str[8];
-        uint8_t param_magic[8];
-        uint16_t max_length;
-        volatile uint16_t length;
-        volatile char data[AP_PARAM_MAX_EMBEDDED_PARAM];
-    };
-    static const param_defaults_struct param_defaults_data;
-    
-    
     static bool                 check_group_info(const struct GroupInfo *group_info, uint16_t *total_size, 
                                                  uint8_t max_bits, uint8_t prefix_length);
     static bool                 duplicate_key(uint16_t vindex, uint16_t key);
@@ -578,22 +507,15 @@ private:
     // find a default value given a pointer to a default value in flash
     static float get_default_value(const AP_Param *object_ptr, const float *def_value_ptr);
 
-    static bool parse_param_line(char *line, char **vname, float &value);
-    
 #if HAL_OS_POSIX_IO == 1
     /*
       load a parameter defaults file. This happens as part of load_all()
      */
-    static bool count_defaults_in_file(const char *filename, uint16_t &num_defaults);
-    static bool read_param_defaults_file(const char *filename, bool last_pass);
-    static bool load_defaults_file(const char *filename, bool last_pass);
+    static bool parse_param_line(char *line, char **vname, float &value);
+    static bool count_defaults_in_file(const char *filename, uint16_t &num_defaults, bool panic_on_error);
+    static bool read_param_defaults_file(const char *filename);
+    static bool load_defaults_file(const char *filename, bool panic_on_error);
 #endif
-
-    /*
-      load defaults from embedded parameters
-     */
-    static bool count_embedded_param_defaults(uint16_t &count);
-    static void load_embedded_param_defaults(bool last_pass);
     
     // send a parameter to all GCS instances
     void send_parameter(const char *name, enum ap_var_type param_header_type, uint8_t idx) const;
@@ -619,18 +541,6 @@ private:
     static const uint8_t        k_EEPROM_revision    = 6; ///< current format revision
 
     static bool _hide_disabled_groups;
-
-    // support for background saving of parameters. We pack it to reduce memory for the
-    // queue
-    struct PACKED param_save {
-        AP_Param *param;
-        bool force_save;
-    };
-    static ObjectBuffer<struct param_save> save_queue;
-    static bool registered_save_handler;
-
-    // background function for saving parameters
-    void save_io_handler(void);
 };
 
 /// Template class for scalar variables.
@@ -683,10 +593,10 @@ public:
 
     /// Combined set and save
     ///
-    void set_and_save(const T &v) {
+    bool set_and_save(const T &v) {
         bool force = fabsf((float)(_value - v)) < FLT_EPSILON;
         set(v);
-        save(force);
+        return save(force);
     }
 
     /// Combined set and save, but only does the save if the value if
@@ -694,12 +604,12 @@ public:
     /// scan(). This should only be used where we have not set() the
     /// value separately, as otherwise the value in EEPROM won't be
     /// updated correctly.
-    void set_and_save_ifchanged(const T &v) {
+    bool set_and_save_ifchanged(const T &v) {
         if (v == _value) {
-            return;
+            return true;
         }
         set(v);
-        save(true);
+        return save(true);
     }
 
     /// Conversion to T returns a reference to the value.
@@ -788,10 +698,10 @@ public:
 
     /// Combined set and save
     ///
-    void set_and_save(const T &v) {
+    bool set_and_save(const T &v) {
         bool force = (_value != v);
         set(v);
-        save(force);
+        return save(force);
     }
 
     /// Conversion to T returns a reference to the value.

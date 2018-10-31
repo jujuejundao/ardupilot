@@ -20,32 +20,32 @@
 #include <AP_Common/AP_Common.h>
 #include <AP_HAL/AP_HAL.h>
 #include "AP_Airspeed.h"
-#include "AP_Airspeed_Backend.h"
 
 extern const AP_HAL::HAL &hal;
 
-AP_Airspeed_Backend::AP_Airspeed_Backend(AP_Airspeed &_frontend, uint8_t _instance) :
-    frontend(_frontend),
-    instance(_instance)
+AP_Airspeed_Backend::AP_Airspeed_Backend(AP_Airspeed &_frontend) :
+    frontend(_frontend)
 {
+    sem = hal.util->new_semaphore();
 }
 
 AP_Airspeed_Backend::~AP_Airspeed_Backend(void)
 {
+    delete sem;
 }
  
 
 int8_t AP_Airspeed_Backend::get_pin(void) const
 {
-    return frontend.param[instance].pin;
+    return frontend._pin;
 }
 
 float AP_Airspeed_Backend::get_psi_range(void) const
 {
-    return frontend.param[instance].psi_range;
+    return frontend._psi_range;
 }
 
 uint8_t AP_Airspeed_Backend::get_bus(void) const
 {
-    return frontend.param[instance].bus;
+    return frontend._bus;
 }

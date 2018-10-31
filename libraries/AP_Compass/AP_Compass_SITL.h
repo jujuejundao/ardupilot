@@ -13,7 +13,7 @@
 
 class AP_Compass_SITL : public AP_Compass_Backend {
 public:
-    AP_Compass_SITL();
+    AP_Compass_SITL(Compass &);
 
     void read(void);
 
@@ -32,12 +32,12 @@ private:
     VectorN<readings_compass,buffer_length> buffer;
 
     void _timer();
+    bool _has_sample;
     uint32_t _last_sample_time;
 
-    void _setup_eliptical_correcion();
-    
-    Matrix3f _eliptical_corr;
-    Vector3f _last_dia;
-    Vector3f _last_odi;
+    Vector3f _mag_accum;
+    uint32_t _accum_count;
+
+
 };
 #endif // CONFIG_HAL_BOARD

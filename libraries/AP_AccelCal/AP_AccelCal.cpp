@@ -21,6 +21,7 @@
 
 const extern AP_HAL::HAL& hal;
 static bool _start_collect_sample;
+static void _snoop(const mavlink_message_t* msg);
 
 uint8_t AP_AccelCal::_num_clients = 0;
 AP_AccelCal_Client* AP_AccelCal::_clients[AP_ACCELCAL_MAX_NUM_CLIENTS] {};
@@ -96,7 +97,8 @@ void AP_AccelCal::update()
                                 return;
                         }
                         _printf("Place vehicle %s and press any key.", msg);
-                        _waiting_for_mavlink_ack = true;
+                        // setup snooping of packets so we can see the COMMAND_ACK
+                        _gcs->set_snoop(_snoop);
                     }
                 }
 
@@ -275,6 +277,8 @@ void AP_AccelCal::collect_sample()
     for(uint8_t i=0 ; (cal = get_calibrator(i))  ; i++) {
         cal->collect_sample();
     }
+    // setup snooping of packets so we can see the COMMAND_ACK
+    _gcs->set_snoop(nullptr);
     _start_collect_sample = false;
     update_status();
 }
@@ -353,12 +357,8 @@ bool AP_AccelCal::client_active(uint8_t client_num)
     return (bool)_clients[client_num]->_acal_get_calibrator(0);
 }
 
-void AP_AccelCal::handleMessage(const mavlink_message_t* msg)
+static void _snoop(const mavlink_message_t* msg)
 {
-    if (!_waiting_for_mavlink_ack) {
-        return;
-    }
-    _waiting_for_mavlink_ack = false;
     if (msg->msgid == MAVLINK_MSG_ID_COMMAND_ACK) {
         _start_collect_sample = true;
     }
@@ -381,12 +381,15 @@ void AP_AccelCal::_printf(const char* fmt, ...)
     if (!_gcs) {
         return;
     }
-    char msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
+    char msg[50];
     va_list ap;
     va_start(ap, fmt);
     hal.util->vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
-
+    if (msg[strlen(msg)-1] == '\n') {
+        // STATUSTEXT messages should not add linefeed
+        msg[strlen(msg)-1] = 0;
+    }
     AP_HAL::UARTDriver *uart = _gcs->get_uart();
     /*
      *     to ensure these messages get to the user we need to wait for the

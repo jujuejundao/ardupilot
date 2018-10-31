@@ -20,14 +20,15 @@ public:
     // set frame class (i.e. quad, hexa, heli) and type (i.e. x, plus)
     void set_frame_class_and_type(motor_frame_class frame_class, motor_frame_type frame_type) {}
     void set_update_rate( uint16_t speed_hz ) {}
+    void enable() {}
 
-    virtual void output_test_seq(uint8_t motor_seq, int16_t pwm) override {}
+    void output_test(uint8_t motor_seq, int16_t pwm) {}
 
     // output_to_motors - sends output to named servos
     void output_to_motors();
 
     // return 0 motor mask
-    uint16_t get_motor_mask() override { return 0; }
+    uint16_t get_motor_mask() { return 0; }
 
 protected:
     // calculate motor outputs

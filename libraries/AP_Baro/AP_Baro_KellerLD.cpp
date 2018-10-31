@@ -188,15 +188,13 @@ bool AP_Baro_KellerLD::_read()
         return false;
     }
 
-    if (!pressure_ok(pressure_raw)) {
-        return false;
+    if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+        _update_and_wrap_accumulator(pressure_raw, temperature_raw, 128);
+        _sem->give();
+        return true;
     }
-    
-    WITH_SEMAPHORE(_sem);
-    
-    _update_and_wrap_accumulator(pressure_raw, temperature_raw, 128);
-    
-    return true;
+
+    return false;
 }
 
 // Periodic callback, regular update at 50Hz
@@ -230,18 +228,21 @@ void AP_Baro_KellerLD::update()
     float sum_pressure, sum_temperature;
     float num_samples;
 
-    {
-        WITH_SEMAPHORE(_sem);
-
-        if (_accum.num_samples == 0) {
-            return;
-        }
-
-        sum_pressure = _accum.sum_pressure;
-        sum_temperature = _accum.sum_temperature;
-        num_samples = _accum.num_samples;
-        memset(&_accum, 0, sizeof(_accum));
+    if (!_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+        return;
     }
+
+    if (_accum.num_samples == 0) {
+        _sem->give();
+        return;
+    }
+
+    sum_pressure = _accum.sum_pressure;
+    sum_temperature = _accum.sum_temperature;
+    num_samples = _accum.num_samples;
+    memset(&_accum, 0, sizeof(_accum));
+
+    _sem->give();
 
     uint16_t raw_pressure_avg = sum_pressure / num_samples;
     uint16_t raw_temperature_avg = sum_temperature / num_samples;

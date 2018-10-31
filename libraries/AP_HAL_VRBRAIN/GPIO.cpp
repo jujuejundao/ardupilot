@@ -29,7 +29,6 @@ VRBRAINGPIO::VRBRAINGPIO()
 
 void VRBRAINGPIO::init()
 {
-
     _led_fd = open(LED0_DEVICE_PATH, O_RDWR);
     if (_led_fd == -1) {
         AP_HAL::panic("Unable to open " LED0_DEVICE_PATH);
@@ -38,14 +37,11 @@ void VRBRAINGPIO::init()
         hal.console->printf("GPIO: Unable to setup GPIO LED BLUE\n");
     }
     if (ioctl(_led_fd, LED_OFF, LED_RED) != 0) {
-        hal.console->printf("GPIO: Unable to setup GPIO LED RED\n");
+         hal.console->printf("GPIO: Unable to setup GPIO LED RED\n");
     }
-
     if (ioctl(_led_fd, LED_OFF, LED_GREEN) != 0) {
-        hal.console->printf("GPIO: Unable to setup GPIO LED GREEN\n");
+         hal.console->printf("GPIO: Unable to setup GPIO LED GREEN\n");
     }
-
-
 
     _tone_alarm_fd = open(TONEALARM0_DEVICE_PATH, O_WRONLY);
     if (_tone_alarm_fd == -1) {
@@ -71,11 +67,6 @@ void VRBRAINGPIO::init()
         hal.console->printf("GPIO: Unable to setup GPIO_3\n");
     }
 #endif
-#ifdef GPIO_SERVO_4
-    if (ioctl(_gpio_fmu_fd, GPIO_CLEAR, GPIO_SERVO_4) != 0) {
-        hal.console->printf("GPIO: Unable to setup GPIO_4\n");
-    }
-#endif
 }
 
 void VRBRAINGPIO::pinMode(uint8_t pin, uint8_t output)
@@ -83,6 +74,12 @@ void VRBRAINGPIO::pinMode(uint8_t pin, uint8_t output)
     switch (pin) {
     }
 }
+
+int8_t VRBRAINGPIO::analogPinToDigitalPin(uint8_t pin)
+{
+    return -1;
+}
+
 
 uint8_t VRBRAINGPIO::read(uint8_t pin) {
     switch (pin) {
@@ -92,14 +89,6 @@ uint8_t VRBRAINGPIO::read(uint8_t pin) {
             uint32_t relays = 0;
             ioctl(_gpio_fmu_fd, GPIO_GET, (unsigned long)&relays);
             return (relays & GPIO_SERVO_3)?HIGH:LOW;
-        }
-#endif
-
-#ifdef GPIO_SERVO_4
-        case EXTERNAL_RELAY2_PIN: {
-            uint32_t relays = 0;
-            ioctl(_gpio_fmu_fd, GPIO_GET, (unsigned long)&relays);
-            return (relays & GPIO_SERVO_4)?HIGH:LOW;
         }
 #endif
 
@@ -153,11 +142,6 @@ void VRBRAINGPIO::write(uint8_t pin, uint8_t value)
             break;
 #endif
 
-#ifdef GPIO_SERVO_4
-        case EXTERNAL_RELAY2_PIN:
-            ioctl(_gpio_fmu_fd, value==LOW?GPIO_CLEAR:GPIO_SET, GPIO_SERVO_4);
-            break;
-#endif
 
     }
 }
@@ -170,6 +154,12 @@ void VRBRAINGPIO::toggle(uint8_t pin)
 /* Alternative interface: */
 AP_HAL::DigitalSource* VRBRAINGPIO::channel(uint16_t n) {
     return new VRBRAINDigitalSource(0);
+}
+
+/* Interrupt interface: */
+bool VRBRAINGPIO::attach_interrupt(uint8_t interrupt_num, AP_HAL::Proc p, uint8_t mode)
+{
+    return true;
 }
 
 /*

@@ -22,26 +22,6 @@ const struct LogStructure *DataFlash_Backend::structure(uint8_t num) const
     return _front.structure(num);
 }
 
-uint8_t DataFlash_Backend::num_units() const
-{
-    return _front._num_units;
-}
-
-const struct UnitStructure *DataFlash_Backend::unit(uint8_t num) const
-{
-    return _front.unit(num);
-}
-
-uint8_t DataFlash_Backend::num_multipliers() const
-{
-    return _front._num_multipliers;
-}
-
-const struct MultiplierStructure *DataFlash_Backend::multiplier(uint8_t num) const
-{
-    return _front.multiplier(num);
-}
-
 DataFlash_Backend::vehicle_startup_message_Log_Writer DataFlash_Backend::vehicle_message_writer() {
     return _front._vehicle_messages;
 }
@@ -49,10 +29,10 @@ DataFlash_Backend::vehicle_startup_message_Log_Writer DataFlash_Backend::vehicle
 void DataFlash_Backend::periodic_10Hz(const uint32_t now)
 {
 }
-void DataFlash_Backend::periodic_1Hz()
+void DataFlash_Backend::periodic_1Hz(const uint32_t now)
 {
 }
-void DataFlash_Backend::periodic_fullrate()
+void DataFlash_Backend::periodic_fullrate(const uint32_t now)
 {
 }
 
@@ -60,14 +40,14 @@ void DataFlash_Backend::periodic_tasks()
 {
     uint32_t now = AP_HAL::millis();
     if (now - _last_periodic_1Hz > 1000) {
-        periodic_1Hz();
+        periodic_1Hz(now);
         _last_periodic_1Hz = now;
     }
     if (now - _last_periodic_10Hz > 100) {
         periodic_10Hz(now);
         _last_periodic_10Hz = now;
     }
-    periodic_fullrate();
+    periodic_fullrate(now);
 }
 
 void DataFlash_Backend::start_new_log_reset_variables()
@@ -97,9 +77,6 @@ void DataFlash_Backend::push_log_blocks() {
 // for other messages to go out to the log
 bool DataFlash_Backend::WriteBlockCheckStartupMessages()
 {
-#if APM_BUILD_TYPE(APM_BUILD_Replay)
-    return true;
-#endif
     if (_startup_messagewriter->fmt_done()) {
         return true;
     }
@@ -107,12 +84,6 @@ bool DataFlash_Backend::WriteBlockCheckStartupMessages()
     if (_writing_startup_messages) {
         // we have been called by a messagewriter, so writing is OK
         return true;
-    }
-
-    if (!_startup_messagewriter->finished() &&
-        !hal.scheduler->in_main_thread()) {
-        // only the main thread may write startup messages out
-        return false;
     }
 
     // we're not writing startup messages, so this must be some random
@@ -149,20 +120,13 @@ void DataFlash_Backend::WriteMoreStartupMessages()
 bool DataFlash_Backend::Log_Write_Emit_FMT(uint8_t msg_type)
 {
     // get log structure from front end:
-    char ls_name[LS_NAME_SIZE] = {};
-    char ls_format[LS_FORMAT_SIZE] = {};
-    char ls_labels[LS_LABELS_SIZE] = {};
-    char ls_units[LS_UNITS_SIZE] = {};
-    char ls_multipliers[LS_MULTIPLIERS_SIZE] = {};
     struct LogStructure logstruct = {
         // these will be overwritten, but need to keep the compiler happy:
         0,
         0,
-        ls_name,
-        ls_format,
-        ls_labels,
-        ls_units,
-        ls_multipliers
+        "IGNO",
+        "",
+        ""
     };
     if (!_front.fill_log_write_logstructure(logstruct, msg_type)) {
         // this is a bug; we've been asked to write out the FMT
@@ -173,9 +137,6 @@ bool DataFlash_Backend::Log_Write_Emit_FMT(uint8_t msg_type)
     }
 
     if (!Log_Write_Format(&logstruct)) {
-        return false;
-    }
-    if (!Log_Write_Format_Units(&logstruct)) {
         return false;
     }
 
@@ -310,61 +271,12 @@ bool DataFlash_Backend::StartNewLogOK() const
     if (_front.in_log_download()) {
         return false;
     }
-    if (!hal.scheduler->in_main_thread()) {
-        return false;
-    }
     return true;
 }
 
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-void DataFlash_Backend::validate_WritePrioritisedBlock(const void *pBuffer,
-                                                       uint16_t size)
-{
-    // just check the first few packets to avoid too much overhead
-    // (finding the structures is expensive)
-    static uint16_t count = 0;
-    if (count > 65534) {
-        return;
-    }
-    count++;
-
-    // we assume here that we ever WritePrioritisedBlock for a single
-    // message.  If this assumption becomes false we can't do these
-    // checks.
-    if (size < 3) {
-        AP_HAL::panic("Short prioritised block");
-    }
-    if (((uint8_t*)pBuffer)[0] != HEAD_BYTE1 ||
-        ((uint8_t*)pBuffer)[1] != HEAD_BYTE2) {
-        AP_HAL::panic("Not passed a message");
-    }
-    const uint8_t type = ((uint8_t*)pBuffer)[2];
-    uint8_t type_len;
-    const struct LogStructure *s = _front.structure_for_msg_type(type);
-    if (s == nullptr) {
-        const struct DataFlash_Class::log_write_fmt *t = _front.log_write_fmt_for_msg_type(type);
-        if (t == nullptr) {
-            AP_HAL::panic("No structure for msg_type=%u", type);
-        }
-        type_len = t->msg_len;
-    } else {
-        type_len = s->msg_len;
-    }
-    if (type_len != size) {
-        char name[5] = {}; // get a null-terminated string
-        memcpy(name, s->name, 4);
-        AP_HAL::panic("Size mismatch for %u (%s) (expected=%u got=%u)\n",
-                      type, name, type_len, size);
-    }
-}
-#endif
-
 bool DataFlash_Backend::WritePrioritisedBlock(const void *pBuffer, uint16_t size, bool is_critical)
 {
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    validate_WritePrioritisedBlock(pBuffer, size);
-#endif
-    if (!ShouldLog(is_critical)) {
+    if (!ShouldLog()) {
         return false;
     }
     if (StartNewLogOK()) {
@@ -376,47 +288,17 @@ bool DataFlash_Backend::WritePrioritisedBlock(const void *pBuffer, uint16_t size
     return _WritePrioritisedBlock(pBuffer, size, is_critical);
 }
 
-bool DataFlash_Backend::ShouldLog(bool is_critical)
+bool DataFlash_Backend::ShouldLog() const
 {
     if (!_front.WritesEnabled()) {
+        return false;
+    }
+    if (!_front.vehicle_is_armed() && !_front.log_while_disarmed()) {
         return false;
     }
     if (!_initialised) {
         return false;
     }
 
-    if (!_startup_messagewriter->finished() &&
-        !hal.scheduler->in_main_thread()) {
-        // only the main thread may write startup messages out
-        return false;
-    }
-
-    if (is_critical && have_logged_armed && !_front._params.file_disarm_rot) {
-        // if we have previously logged while armed then we log all
-        // critical messages from then on. That fixes a problem where
-        // logs show the wrong flight mode if you disarm then arm again
-        return true;
-    }
-    
-    if (!_front.vehicle_is_armed() && !_front.log_while_disarmed()) {
-        return false;
-    }
-
-    if (_front.vehicle_is_armed()) {
-        have_logged_armed = true;
-    }
-    
     return true;
-}
-
-bool DataFlash_Backend::Log_Write_MessageF(const char *fmt, ...)
-{
-    char msg[65] {}; // sizeof(log_Message.msg) + null-termination
-
-    va_list ap;
-    va_start(ap, fmt);
-    hal.util->vsnprintf(msg, sizeof(msg), fmt, ap);
-    va_end(ap);
-
-    return Log_Write_Message(msg);
 }

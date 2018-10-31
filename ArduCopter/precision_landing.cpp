@@ -8,7 +8,7 @@
 
 void Copter::init_precland()
 {
-    copter.precland.init(400);
+    copter.precland.init();
 }
 
 void Copter::update_precland()
@@ -24,6 +24,6 @@ void Copter::update_precland()
         }
     }
 
-    precland.update(height_above_ground_cm, rangefinder_alt_ok());
+    copter.precland.update(height_above_ground_cm, rangefinder_alt_ok());
 }
 #endif

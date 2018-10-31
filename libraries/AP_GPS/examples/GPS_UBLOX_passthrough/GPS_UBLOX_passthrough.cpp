@@ -10,6 +10,7 @@
 #include <AP_GPS/AP_GPS.h>
 #include <DataFlash/DataFlash.h>
 #include <AP_InertialSensor/AP_InertialSensor.h>
+#include <AP_ADC/AP_ADC.h>
 #include <GCS_MAVLink/GCS_MAVLink.h>
 #include <AP_Baro/AP_Baro.h>
 #include <Filter/Filter.h>
@@ -23,6 +24,7 @@
 #include <AP_Terrain/AP_Terrain.h>
 #include <AP_Math/AP_Math.h>
 #include <AP_Notify/AP_Notify.h>
+#include <AP_Rally/AP_Rally.h>
 #include <AP_Scheduler/AP_Scheduler.h>
 #include <AP_BattMonitor/AP_BattMonitor.h>
 #include <AP_RangeFinder/AP_RangeFinder.h>

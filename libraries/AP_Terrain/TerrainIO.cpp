@@ -27,13 +27,11 @@
 
 #include <assert.h>
 #include <stdio.h>
-#if HAL_OS_POSIX_IO
 #include <unistd.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-#endif
-#include <sys/types.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -173,9 +171,9 @@ void AP_Terrain::open_file(void)
     }
     snprintf(p, 13, "/%c%02u%c%03u.DAT",
              block.lat_degrees<0?'S':'N',
-             (unsigned)MIN(abs((int32_t)block.lat_degrees), 99),
+             abs((int32_t)block.lat_degrees),
              block.lon_degrees<0?'W':'E',
-             (unsigned)MIN(abs((int32_t)block.lon_degrees), 999));
+             abs((int32_t)block.lon_degrees));
 
     // create directory if need be
     if (!directory_created) {
@@ -198,11 +196,7 @@ void AP_Terrain::open_file(void)
     if (fd != -1) {
         ::close(fd);
     }
-#if HAL_OS_POSIX_IO
     fd = ::open(file_path, O_RDWR|O_CREAT|O_CLOEXEC, 0644);
-#else
-    fd = ::open(file_path, O_RDWR|O_CREAT|O_CLOEXEC);
-#endif
     if (fd == -1) {
 #if TERRAIN_DEBUG
         hal.console->printf("Open %s failed - %s\n",

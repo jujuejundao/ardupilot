@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AP_HAL_Linux.h"
+#include <AP_ADC/AP_ADC.h>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -13,10 +14,8 @@
 #define IIO_VOLTAGE_SCALING 0.00142602816
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BBBMINI
 #define IIO_VOLTAGE_SCALING 3.0*1.8/4095.0
-#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BLUE
-#define IIO_VOLTAGE_SCALING 1.8/4095.0
-#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_POCKET
-#define IIO_VOLTAGE_SCALING 3.0*1.8/4095.0
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+#define IIO_VOLTAGE_SCALING 2.0 / 1000
 #else
 #define IIO_VOLTAGE_SCALING 1.0
 #endif
@@ -42,7 +41,6 @@ private:
     int16_t     _pin;
     int         _pin_fd;
     int         fd_analog_sources[IIO_ANALOG_IN_COUNT];
-    HAL_Semaphore _semaphore;
 
     void init_pins(void);
     void select_pin(void);

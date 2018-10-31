@@ -53,17 +53,11 @@ GCS_MAVLINK::queued_param_send()
 
     // use at most 30% of bandwidth on parameters. The constant 26 is
     // 1/(1000 * 1/8 * 0.001 * 0.3)
-    const uint32_t link_bw = _port->bw_in_kilobytes_per_second();
-
-    bytes_allowed = link_bw * (tnow - _queued_parameter_send_time_ms) * 26;
-    const uint16_t size_for_one_param_value_msg = MAVLINK_MSG_ID_PARAM_VALUE_LEN + packet_overhead();
-    if (bytes_allowed < size_for_one_param_value_msg) {
-        bytes_allowed = size_for_one_param_value_msg;
-    }
+    bytes_allowed = 57 * (tnow - _queued_parameter_send_time_ms) * 26;
     if (bytes_allowed > comm_get_txspace(chan)) {
         bytes_allowed = comm_get_txspace(chan);
     }
-    count = bytes_allowed / size_for_one_param_value_msg;
+    count = bytes_allowed / (MAVLINK_MSG_ID_PARAM_VALUE_LEN + packet_overhead());
 
     // when we don't have flow control we really need to keep the
     // param download very slow, or it tends to stall
@@ -108,20 +102,21 @@ GCS_MAVLINK::queued_param_send()
  */
 bool GCS_MAVLINK::have_flow_control(void)
 {
-    if (_port == nullptr) {
+    if (!valid_channel(chan)) {
         return false;
     }
 
-    if (_port->get_flow_control() != AP_HAL::UARTDriver::FLOW_CONTROL_DISABLE) {
-        return true;
+    if (mavlink_comm_port[chan] == nullptr) {
+        return false;
     }
 
     if (chan == MAVLINK_COMM_0) {
         // assume USB console has flow control
-        return hal.gpio->usb_connected();
+        return hal.gpio->usb_connected() || mavlink_comm_port[chan]->get_flow_control() != AP_HAL::UARTDriver::FLOW_CONTROL_DISABLE;
+    } else {
+        // all other channels
+        return mavlink_comm_port[chan]->get_flow_control() != AP_HAL::UARTDriver::FLOW_CONTROL_DISABLE;
     }
-
-    return false;
 }
 
 
@@ -130,7 +125,7 @@ bool GCS_MAVLINK::have_flow_control(void)
   save==false so we don't want the save to happen when the user connects the
   ground station.
  */
-void GCS_MAVLINK::handle_request_data_stream(mavlink_message_t *msg)
+void GCS_MAVLINK::handle_request_data_stream(mavlink_message_t *msg, bool save)
 {
     mavlink_request_data_stream_t packet;
     mavlink_msg_request_data_stream_decode(msg, &packet);
@@ -149,7 +144,7 @@ void GCS_MAVLINK::handle_request_data_stream(mavlink_message_t *msg)
     case MAV_DATA_STREAM_ALL:
         // note that we don't set STREAM_PARAMS - that is internal only
         for (uint8_t i=0; i<STREAM_PARAMS; i++) {
-            if (persist_streamrates()) {
+            if (save) {
                 streamRates[i].set_and_save_ifchanged(freq);
             } else {
                 streamRates[i].set(freq);
@@ -183,7 +178,7 @@ void GCS_MAVLINK::handle_request_data_stream(mavlink_message_t *msg)
     }
 
     if (rate != nullptr) {
-        if (persist_streamrates()) {
+        if (save) {
             rate->set_and_save_ifchanged(freq);
         } else {
             rate->set(freq);
@@ -234,7 +229,7 @@ void GCS_MAVLINK::handle_param_request_read(mavlink_message_t *msg)
     struct pending_param_request req;
     req.chan = chan;
     req.param_index = packet.param_index;
-    memcpy(req.param_name, packet.param_id, MIN(sizeof(packet.param_id), sizeof(req.param_name)));
+    memcpy(req.param_name, packet.param_id, sizeof(req.param_name));
     req.param_name[AP_MAX_NAME_SIZE] = 0;
 
     // queue it for processing by io timer
@@ -328,15 +323,14 @@ bool GCS_MAVLINK::stream_trigger(enum streams stream_num)
 /*
   send a parameter value message to all active MAVLink connections
  */
-void GCS::send_parameter_value(const char *param_name, ap_var_type param_type, float param_value)
+void GCS_MAVLINK::send_parameter_value_all(const char *param_name, ap_var_type param_type, float param_value)
 {
-    const uint8_t mavlink_active = GCS_MAVLINK::active_channel_mask();
     for (uint8_t i=0; i<MAVLINK_COMM_NUM_BUFFERS; i++) {
         if ((1U<<i) & mavlink_active) {
-            const mavlink_channel_t _chan = (mavlink_channel_t)(MAVLINK_COMM_0+i);
-            if (HAVE_PAYLOAD_SPACE(_chan, PARAM_VALUE)) {
+            mavlink_channel_t chan = (mavlink_channel_t)(MAVLINK_COMM_0+i);
+            if (HAVE_PAYLOAD_SPACE(chan, PARAM_VALUE)) {
                 mavlink_msg_param_value_send(
-                    _chan,
+                    chan,
                     param_name,
                     param_value,
                     mav_var_type(param_type),

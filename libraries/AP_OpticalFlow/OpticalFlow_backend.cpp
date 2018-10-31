@@ -20,10 +20,14 @@ extern const AP_HAL::HAL& hal;
 OpticalFlow_backend::OpticalFlow_backend(OpticalFlow &_frontend) :
     frontend(_frontend)
 {
+    _sem = hal.util->new_semaphore();    
 }
 
 OpticalFlow_backend::~OpticalFlow_backend(void)
 {
+    if (_sem) {
+        delete _sem;
+    }
 }
 
 // update the frontend

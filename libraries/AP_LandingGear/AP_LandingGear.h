@@ -11,20 +11,14 @@
 /// @class	AP_LandingGear
 /// @brief	Class managing the control of landing gear
 class AP_LandingGear {
-public:
-    AP_LandingGear() {
-        // setup parameter defaults
-        AP_Param::setup_object_defaults(this, var_info);
-    }
 
-    /* Do not allow copies */
-    AP_LandingGear(const AP_LandingGear &other) = delete;
-    AP_LandingGear &operator=(const AP_LandingGear&) = delete;
+public:
 
     // Gear command modes
     enum LandingGearCommand {
         LandingGear_Retract,
         LandingGear_Deploy,
+        LandingGear_Deploy_And_Keep_Deployed,
     };
 
     // Gear command modes
@@ -33,6 +27,13 @@ public:
         LandingGear_Startup_Retract = 1,
         LandingGear_Startup_Deploy = 2,
     };
+
+    /// Constructor
+    AP_LandingGear()
+    {
+        // setup parameter defaults
+        AP_Param::setup_object_defaults(this, var_info);
+    }
 
     /// initialise state of landing gear
     void init();
@@ -46,6 +47,7 @@ public:
     static const struct AP_Param::GroupInfo        var_info[];
 
 private:
+
     // Parameters
     AP_Int16    _servo_retract_pwm;     // PWM value to move servo to when gear is retracted
     AP_Int16    _servo_deploy_pwm;      // PWM value to move servo to when gear is deployed
@@ -53,6 +55,7 @@ private:
 
     // internal variables
     bool        _deployed;              // true if the landing gear has been deployed, initialized false
+    bool        _deploy_lock;           // used to force landing gear to remain deployed until another regular Deploy command is received to reduce accidental retraction
     
     /// retract - retract landing gear
     void retract();

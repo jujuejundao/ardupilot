@@ -2,6 +2,7 @@
 // Simple test for the AP_AHRS interface
 //
 
+#include <AP_ADC/AP_ADC.h>
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
@@ -12,34 +13,34 @@ void loop();
 
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
+// INS and Baro declaration
+AP_InertialSensor ins;
 
-static AP_BoardConfig board_config;
-static AP_InertialSensor ins;
+Compass compass;
 
-static Compass compass;
-
-static AP_GPS gps;
-static AP_Baro barometer;
-static AP_SerialManager serial_manager;
+AP_GPS gps;
+AP_Baro barometer;
+AP_SerialManager serial_manager;
 
 class DummyVehicle {
 public:
-    RangeFinder sonar{serial_manager, ROTATION_PITCH_270};
-    NavEKF2 EKF2{&ahrs, sonar};
-    NavEKF3 EKF3{&ahrs, sonar};
-    AP_AHRS_NavEKF ahrs{EKF2, EKF3,
-            AP_AHRS_NavEKF::FLAG_ALWAYS_USE_EKF};
+    RangeFinder sonar {serial_manager, ROTATION_PITCH_270};
+    AP_AHRS_NavEKF ahrs{ins, barometer, gps, sonar, EKF2, EKF3,
+                        AP_AHRS_NavEKF::FLAG_ALWAYS_USE_EKF};
+    NavEKF2 EKF2{&ahrs, barometer, sonar};
+    NavEKF3 EKF3{&ahrs, barometer, sonar};
 };
 
 static DummyVehicle vehicle;
 
 // choose which AHRS system to use
-// AP_AHRS_DCM ahrs = AP_AHRS_DCM::create(barometer, gps);
-AP_AHRS_NavEKF &ahrs = vehicle.ahrs;
+// AP_AHRS_DCM  ahrs(ins, baro, gps);
+AP_AHRS_NavEKF ahrs(vehicle.ahrs);
 
 void setup(void)
 {
-    board_config.init();
+    AP_BoardConfig{}.init();
+
     ins.init(100);
     ahrs.init();
     serial_manager.init();

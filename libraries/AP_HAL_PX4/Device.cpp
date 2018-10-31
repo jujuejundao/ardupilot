@@ -36,7 +36,7 @@ void *DeviceBus::bus_thread(void *arg)
     struct DeviceBus *binfo = (struct DeviceBus *)arg;
 
     // setup a name for the thread
-    char name[] = "XXX:XX";
+    char name[] = "XXX:X";
     switch (binfo->hal_device->bus_type()) {
     case AP_HAL::Device::BUS_TYPE_I2C:
         snprintf(name, sizeof(name), "I2C:%u",

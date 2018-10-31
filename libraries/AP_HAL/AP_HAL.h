@@ -23,6 +23,8 @@
 #include "CAN.h"
 #endif
 
+#include "utility/Print.h"
+#include "utility/Stream.h"
 #include "utility/BetterStream.h"
 
 /* HAL Class definition */

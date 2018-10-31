@@ -10,6 +10,7 @@
 #include <AP_GPS/AP_GPS.h>
 #include <DataFlash/DataFlash.h>
 #include <AP_InertialSensor/AP_InertialSensor.h>
+#include <AP_ADC/AP_ADC.h>
 #include <GCS_MAVLink/GCS_MAVLink.h>
 #include <AP_Baro/AP_Baro.h>
 #include <Filter/Filter.h>
@@ -24,6 +25,7 @@
 #include <AP_Math/AP_Math.h>
 #include <AP_Notify/AP_Notify.h>
 #include <AP_Notify/AP_BoardLED.h>
+#include <AP_Rally/AP_Rally.h>
 #include <AP_Scheduler/AP_Scheduler.h>
 #include <AP_BattMonitor/AP_BattMonitor.h>
 #include <AP_SerialManager/AP_SerialManager.h>
@@ -35,22 +37,21 @@ void loop();
 
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
-static AP_BoardConfig board_config;
-
 // create board led object
 AP_BoardLED board_led;
 
 // This example uses GPS system. Create it.
-static AP_GPS gps;
+AP_GPS gps;
+
 // Serial manager is needed for UART comunications
-static AP_SerialManager serial_manager;
+AP_SerialManager serial_manager;
 
 
 void setup()
 {
     hal.console->printf("GPS AUTO library test\n");
 
-    board_config.init();
+    AP_BoardConfig{}.init();
 
     // Initialise the leds
     board_led.init();

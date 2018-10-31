@@ -90,9 +90,14 @@ const AP_Param::GroupInfo AP_RPM::var_info[] = {
     AP_GROUPEND
 };
 
-AP_RPM::AP_RPM(void)
+AP_RPM::AP_RPM(void) :
+    num_instances(0)
 {
     AP_Param::setup_object_defaults(this, var_info);
+
+    // init state and drivers
+    memset(state,0,sizeof(state));
+    memset(drivers,0,sizeof(drivers));
 }
 
 /*
@@ -105,28 +110,27 @@ void AP_RPM::init(void)
         return;
     }
     for (uint8_t i=0; i<RPM_MAX_INSTANCES; i++) {
-        uint8_t type = _type[i];
+#if CONFIG_HAL_BOARD == HAL_BOARD_PX4  || CONFIG_HAL_BOARD == HAL_BOARD_VRBRAIN
+        uint8_t type = _type[num_instances];
+        uint8_t instance = num_instances;
 
-#if (CONFIG_HAL_BOARD == HAL_BOARD_PX4) || ((CONFIG_HAL_BOARD == HAL_BOARD_VRBRAIN) && (!defined(CONFIG_ARCH_BOARD_VRBRAIN_V51) && !defined(CONFIG_ARCH_BOARD_VRUBRAIN_V52)))
         if (type == RPM_TYPE_PX4_PWM) {
-            drivers[i] = new AP_RPM_PX4_PWM(*this, i, state[i]);
-        }
-#else
-        if (type == RPM_TYPE_PX4_PWM) {
-            // on non-PX4 treat PX4-pin as AUXPIN option, for upgrade
-            type = RPM_TYPE_PIN;
+            state[instance].instance = instance;
+            drivers[instance] = new AP_RPM_PX4_PWM(*this, instance, state[instance]);
+        } else if (type == RPM_TYPE_PIN) {
+            state[instance].instance = instance;
+            drivers[instance] = new AP_RPM_Pin(*this, instance, state[instance]);
         }
 #endif
-        if (type == RPM_TYPE_PIN) {
-            drivers[i] = new AP_RPM_Pin(*this, i, state[i]);
-        }
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-        drivers[i] = new AP_RPM_SITL(*this, i, state[i]);
+        uint8_t instance = num_instances;
+        state[instance].instance = instance;
+        drivers[instance] = new AP_RPM_SITL(*this, instance, state[instance]);
 #endif
         if (drivers[i] != nullptr) {
             // we loaded a driver for this instance, so it must be
             // present (although it may not be healthy)
-            num_instances = i+1; // num_instances is a high-water-mark
+            num_instances = i+1;
         }
     }
 }

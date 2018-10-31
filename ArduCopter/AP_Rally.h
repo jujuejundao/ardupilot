@@ -12,6 +12,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+ 
 #pragma once
 
 #include <AP_Rally/AP_Rally.h>
@@ -19,13 +20,12 @@
 
 class AP_Rally_Copter : public AP_Rally
 {
-public:
-    AP_Rally_Copter(AP_AHRS &ahrs) : AP_Rally(ahrs) { }
 
-    /* Do not allow copies */
-    AP_Rally_Copter(const AP_Rally_Copter &other) = delete;
-    AP_Rally_Copter &operator=(const AP_Rally_Copter&) = delete;
+public:
+    // constructor
+    AP_Rally_Copter(AP_AHRS &ahrs) : AP_Rally(ahrs) {};
 
 private:
     bool is_valid(const Location &rally_point) const override;
+
 };

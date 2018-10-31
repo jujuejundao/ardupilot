@@ -8,7 +8,7 @@
 class AP_Airspeed_Analog : public AP_Airspeed_Backend
 {
 public:
-    AP_Airspeed_Analog(AP_Airspeed &frontend, uint8_t _instance);
+    AP_Airspeed_Analog(AP_Airspeed &frontend);
 
     // probe and initialise the sensor
     bool init(void) override;

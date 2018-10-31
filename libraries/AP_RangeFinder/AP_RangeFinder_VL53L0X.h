@@ -24,7 +24,7 @@ private:
     // constructor
     AP_RangeFinder_VL53L0X(RangeFinder::RangeFinder_State &_state, AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev);
 
-    bool init();
+    void init();
     void timer();
 
     // check sensor ID

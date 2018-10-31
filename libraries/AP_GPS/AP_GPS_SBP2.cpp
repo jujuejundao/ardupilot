@@ -303,8 +303,8 @@ AP_GPS_SBP2::_attempt_state_update()
         state.ground_course = wrap_360(degrees(atan2f(state.velocity[1], state.velocity[0])));
 
         state.speed_accuracy        = safe_sqrt(
-                                        powf((float)last_vel_ned.h_accuracy * 1.0e-3f, 2) + 
-                                        powf((float)last_vel_ned.v_accuracy * 1.0e-3f, 2));
+                                        pow((float)last_vel_ned.h_accuracy * 1.0e-3f, 2) + 
+                                        pow((float)last_vel_ned.v_accuracy * 1.0e-3f, 2));
         state.horizontal_accuracy   = (float) last_pos_llh.h_accuracy * 1.0e-3f;
         state.vertical_accuracy     = (float) last_pos_llh.v_accuracy * 1.0e-3f;
 
@@ -336,9 +336,6 @@ AP_GPS_SBP2::_attempt_state_update()
                 break;
             case 4:
                 state.status = AP_GPS::GPS_OK_FIX_3D_RTK_FIXED;
-                break;
-            case 6:
-                state.status = AP_GPS::GPS_OK_FIX_3D_DGPS;
                 break;
             default:
                 state.status = AP_GPS::NO_FIX;

@@ -109,13 +109,7 @@ void SoloGimbal_Parameters::set_param(gmb_param_t param, float value) {
 
     _params[param].state = GMB_PARAMSTATE_ATTEMPTING_TO_SET;
     _params[param].value = value;
-
-    // make a temporary copy of the ID; mavlink_msg_param_set_send
-    // expects an array of the full length
-    char tmp_name[MAVLINK_MSG_PARAM_SET_FIELD_PARAM_ID_LEN+1] {};
-    strncpy(tmp_name, get_param_name(param), MAVLINK_MSG_PARAM_SET_FIELD_PARAM_ID_LEN);
-
-    mavlink_msg_param_set_send(_chan, 0, MAV_COMP_ID_GIMBAL, tmp_name, _params[param].value, MAV_PARAM_TYPE_REAL32);
+    mavlink_msg_param_set_send(_chan, 0, MAV_COMP_ID_GIMBAL, get_param_name(param), _params[param].value, MAV_PARAM_TYPE_REAL32);
 
     _last_request_ms = AP_HAL::millis();
 }
@@ -172,12 +166,11 @@ void SoloGimbal_Parameters::update()
     }
 }
 
-void SoloGimbal_Parameters::handle_param_value(const mavlink_message_t *msg)
+void SoloGimbal_Parameters::handle_param_value(DataFlash_Class *dataflash, mavlink_message_t *msg)
 {
     mavlink_param_value_t packet;
     mavlink_msg_param_value_decode(msg, &packet);
 
-    DataFlash_Class *dataflash = DataFlash_Class::instance();
     if (dataflash != nullptr) {
         dataflash->Log_Write_Parameter(packet.param_id, packet.param_value);
     }

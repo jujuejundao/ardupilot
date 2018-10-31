@@ -35,9 +35,6 @@ class TestBalanceTwist(Test):
             if num_channels < len(ch[i]):
                 num_channels = len(ch[i])
 
-        if logdata.frame:
-            num_channels = logdata.num_motor_channels()
-
         if num_channels < 2:
             return
 
@@ -51,14 +48,13 @@ class TestBalanceTwist(Test):
         if len(ch) == 0:
             return
 
-        avg_sum = 0
+        avg_all = map(lambda x:sum(x)/num_channels,ch)
+        avg_all = sum(avg_all)/len(avg_all)
         avg_ch = []
         for i in range(num_channels):
             avg = map(lambda x: x[i],ch)
             avg = sum(avg)/len(avg)
             avg_ch.append(avg)
-            avg_sum += avg
-        avg_all = avg_sum / num_channels
 
         self.result.statusMessage = "Motor channel averages = %s\nAverage motor output = %.0f\nDifference between min and max motor averages = %.0f" % (str(avg_ch),avg_all,abs(min(avg_ch)-max(avg_ch)))
 

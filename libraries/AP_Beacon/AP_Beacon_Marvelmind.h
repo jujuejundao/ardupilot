@@ -13,16 +13,23 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 /*
- Original C Code by Marvelmind (https://github.com/MarvelmindRobotics/marvelmind.c)
+ Original C Code by Marvelmind (https://bitbucket.org/marvelmind_robotics/)
  Adapted into Ardupilot by Karthik Desai, Amilcar Lucas
  April 2017
  */
 
+#ifndef AP_BEACON_MARVELMIND_H_
+#define AP_BEACON_MARVELMIND_H_
+
 #pragma once
 
-#include "AP_Beacon_Backend.h"
-
+#define AP_BEACON_MARVELMIND_POSITION_DATAGRAM_ID 0x0001
+#define AP_BEACON_MARVELMIND_POSITIONS_DATAGRAM_ID 0x0002
+#define AP_BEACON_MARVELMIND_POSITION_DATAGRAM_HIGHRES_ID 0x0011
+#define AP_BEACON_MARVELMIND_POSITIONS_DATAGRAM_HIGHRES_ID 0x0012
 #define AP_BEACON_MARVELMIND_BUF_SIZE 255
+
+#include "AP_Beacon_Backend.h"
 
 class AP_Beacon_Marvelmind : public AP_Beacon_Backend
 {
@@ -43,16 +50,17 @@ private:
     {
         uint8_t address;
         uint32_t timestamp;
-        int32_t x__mm, y__mm, z__mm;
+        int32_t x, y, z; // coordinates in millimeters
         bool high_resolution;
+        bool ready;
+        bool processed;
     };
 
     struct StationaryBeaconPosition
     {
         uint8_t address;
-        int32_t x__mm, y__mm, z__mm;
+        int32_t x, y, z;// coordinates in millimeters
         bool high_resolution;
-        float distance__m;  // Distance between beacon and hedge
     };
 
     struct StationaryBeaconsPositions
@@ -64,8 +72,16 @@ private:
 
     struct MarvelmindHedge
     {
+        uint8_t max_buffered_positions;   // maximum count of measurements of coordinates stored in buffer, default: 3
+        PositionValue * position_buffer;  // buffer of measurements
         StationaryBeaconsPositions positions_beacons;
-        PositionValue cur_position;
+        bool verbose;   // verbose flag which activate console output, default: False
+        bool pause;     //  pause flag. If True, class would not read serial data
+        bool termination_required;  //  If True, thread would exit from main loop and stop
+        void (*receive_data_callback)(PositionValue position); //  receive_data_callback is callback function to receive data
+
+        uint8_t _last_values_count;
+        uint8_t _last_values_next;
         bool _have_new_values;
     };
 
@@ -74,21 +90,23 @@ private:
         RECV_DGRAM
     } parse_state; // current state of receive data
 
-    MarvelmindHedge hedge;
+    MarvelmindHedge *hedge;
+    PositionValue cur_position;
     uint8_t input_buffer[AP_BEACON_MARVELMIND_BUF_SIZE];
     uint16_t num_bytes_in_block_received;
     uint16_t data_id;
 
     uint16_t calc_crc_modbus(uint8_t *buf, uint16_t len);
     StationaryBeaconPosition* get_or_alloc_beacon(uint8_t address);
+    uint8_t mark_position_ready();
     void process_beacons_positions_datagram();
     void process_beacons_positions_highres_datagram();
-    void process_position_highres_datagram();
-    void process_position_datagram();
-    void process_beacons_distances_datagram();
-    void set_stationary_beacons_positions();
+    void process_position_highres_datagram(PositionValue &p);
+    void process_position_datagram(PositionValue &p);
+    void create_marvelmind_hedge();
+    void start_marvelmind_hedge();
+    void set_stationary_beacons_positions_and_distances();
     void order_stationary_beacons();
-    int8_t find_beacon_instance(uint8_t address) const;
 
     // Variables for Ardupilot
     AP_HAL::UARTDriver *uart;
@@ -103,3 +121,4 @@ private:
     bool beacon_position_initialized;
 };
 
+#endif /* AP_BEACON_MARVELMIND_H_ */

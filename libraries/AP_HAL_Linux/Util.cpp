@@ -10,6 +10,7 @@
 #include <AP_HAL/AP_HAL.h>
 
 #include "Heat_Pwm.h"
+#include "ToneAlarm_Raspilot.h"
 #include "ToneAlarm_Disco.h"
 #include "Util.h"
 
@@ -17,7 +18,10 @@ using namespace Linux;
 
 extern const AP_HAL::HAL& hal;
 
-#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_DISCO
+static int state;
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_RASPILOT
+ToneAlarm_Raspilot Util::_toneAlarm;
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_DISCO
 ToneAlarm_Disco Util::_toneAlarm;
 #else
 ToneAlarm Util::_toneAlarm;
@@ -62,13 +66,42 @@ void Util::commandline_arguments(uint8_t &argc, char * const *&argv)
     argv = saved_argv;
 }
 
-void Util::set_hw_rtc(uint64_t time_utc_usec)
+bool Util::toneAlarm_init()
+{
+    return _toneAlarm.init();
+}
+
+void Util::toneAlarm_set_tune(uint8_t tone)
+{
+    _toneAlarm.set_tune(tone);
+}
+
+void Util::_toneAlarm_timer_tick() {
+    if(state == 0) {
+        state = state + _toneAlarm.init_tune();
+    } else if (state == 1) {
+        state = state + _toneAlarm.set_note();
+    }
+    if (state == 2) {
+        state = state + _toneAlarm.play();
+    } else if (state == 3) {
+        state = 1;
+    }
+    
+    if (_toneAlarm.is_tune_comp()) {
+        state = 0;
+    }
+    
+}
+
+void Util::set_system_clock(uint64_t time_utc_usec)
 {
 #if CONFIG_HAL_BOARD_SUBTYPE != HAL_BOARD_SUBTYPE_LINUX_NONE
-    // call superclass method to set time.  We've guarded this so we
-    // don't reset the HW clock time on people's laptops.
-    AP_HAL::Util::set_hw_rtc(time_utc_usec);
-#endif
+    timespec ts;
+    ts.tv_sec = time_utc_usec/1000000ULL;
+    ts.tv_nsec = (time_utc_usec % 1000000ULL) * 1000ULL;
+    clock_settime(CLOCK_REALTIME, &ts);    
+#endif    
 }
 
 bool Util::is_chardev_node(const char *path)

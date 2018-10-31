@@ -29,7 +29,6 @@ namespace AP_HAL {
     class Semaphore;
     class OpticalFlow;
 
-    class CANProtocol;
     class CANManager;
     class CAN;
 

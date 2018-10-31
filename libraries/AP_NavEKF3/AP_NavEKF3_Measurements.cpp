@@ -161,7 +161,7 @@ void NavEKF3_core::writeWheelOdom(float delAng, float delTime, uint32_t timeStam
 
 // write the raw optical flow measurements
 // this needs to be called externally.
-void NavEKF3_core::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f &rawFlowRates, const Vector2f &rawGyroRates, const uint32_t msecFlowMeas, const Vector3f &posOffset)
+void NavEKF3_core::writeOptFlowMeas(uint8_t &rawFlowQuality, Vector2f &rawFlowRates, Vector2f &rawGyroRates, uint32_t &msecFlowMeas, const Vector3f &posOffset)
 {
     // limit update rate to maximum allowed by sensor buffers
     if ((imuSampleTime_ms - flowMeaTime_ms) < frontend->sensorIntervalMin_ms) {
@@ -247,18 +247,6 @@ void NavEKF3_core::readMagData()
         return;
     }
 
-    if (_ahrs->get_compass()->learn_offsets_enabled()) {
-        // while learning offsets keep all mag states reset
-        InitialiseVariablesMag();
-        wasLearningCompass_ms = imuSampleTime_ms;
-    } else if (wasLearningCompass_ms != 0 && imuSampleTime_ms - wasLearningCompass_ms > 1000) {
-        wasLearningCompass_ms = 0;
-        // force a new yaw alignment 1s after learning completes. The
-        // delay is to ensure any buffered mag samples are discarded
-        yawAlignComplete = false;
-        InitialiseVariablesMag();
-    }
-    
     // limit compass update rate to prevent high processor loading because magnetometer fusion is an expensive step and we could overflow the FIFO buffer
     if (use_compass() && ((_ahrs->get_compass()->last_update_usec() - lastMagUpdate_us) > 1000 * frontend->sensorIntervalMin_ms)) {
         frontend->logging.log_compass = true;
@@ -341,7 +329,7 @@ void NavEKF3_core::readMagData()
  */
 void NavEKF3_core::readIMUData()
 {
-    const AP_InertialSensor &ins = AP::ins();
+    const AP_InertialSensor &ins = _ahrs->get_ins();
 
     // calculate an averaged IMU update rate using a spike and lowpass filter combination
     dtIMUavg = 0.02f * constrain_float(ins.get_loop_delta_t(),0.5f * dtIMUavg, 2.0f * dtIMUavg) + 0.98f * dtIMUavg;
@@ -449,7 +437,7 @@ void NavEKF3_core::readIMUData()
 // read the delta velocity and corresponding time interval from the IMU
 // return false if data is not available
 bool NavEKF3_core::readDeltaVelocity(uint8_t ins_index, Vector3f &dVel, float &dVel_dt) {
-    const AP_InertialSensor &ins = AP::ins();
+    const AP_InertialSensor &ins = _ahrs->get_ins();
 
     if (ins_index < ins.get_accel_count()) {
         ins.get_delta_velocity(ins_index,dVel);
@@ -468,10 +456,8 @@ void NavEKF3_core::readGpsData()
 {
     // check for new GPS data
     // limit update rate to avoid overflowing the FIFO buffer
-    const AP_GPS &gps = AP::gps();
-
-    if (gps.last_message_time_ms() - lastTimeGpsReceived_ms > frontend->sensorIntervalMin_ms) {
-        if (gps.status() >= AP_GPS::GPS_OK_FIX_3D) {
+    if (_ahrs->get_gps().last_message_time_ms() - lastTimeGpsReceived_ms > frontend->sensorIntervalMin_ms) {
+        if (_ahrs->get_gps().status() >= AP_GPS::GPS_OK_FIX_3D) {
             // report GPS fix status
             gpsCheckStatus.bad_fix = false;
 
@@ -479,13 +465,13 @@ void NavEKF3_core::readGpsData()
             secondLastGpsTime_ms = lastTimeGpsReceived_ms;
 
             // get current fix time
-            lastTimeGpsReceived_ms = gps.last_message_time_ms();
+            lastTimeGpsReceived_ms = _ahrs->get_gps().last_message_time_ms();
 
             // estimate when the GPS fix was valid, allowing for GPS processing and other delays
             // ideally we should be using a timing signal from the GPS receiver to set this time
             // Use the driver specified delay
             float gps_delay_sec = 0;
-            gps.get_lag(gps_delay_sec);
+            _ahrs->get_gps().get_lag(gps_delay_sec);
             gpsDataNew.time_ms = lastTimeGpsReceived_ms - (uint32_t)(gps_delay_sec * 1000.0f);
 
             // Correct for the average intersampling delay due to the filter updaterate
@@ -495,17 +481,17 @@ void NavEKF3_core::readGpsData()
             gpsDataNew.time_ms = MIN(MAX(gpsDataNew.time_ms,imuDataDelayed.time_ms),imuDataDownSampledNew.time_ms);
 
             // Get which GPS we are using for position information
-            gpsDataNew.sensor_idx = gps.primary_sensor();
+            gpsDataNew.sensor_idx = _ahrs->get_gps().primary_sensor();
 
             // read the NED velocity from the GPS
-            gpsDataNew.vel = gps.velocity();
+            gpsDataNew.vel = _ahrs->get_gps().velocity();
 
             // Use the speed and position accuracy from the GPS if available, otherwise set it to zero.
             // Apply a decaying envelope filter with a 5 second time constant to the raw accuracy data
             float alpha = constrain_float(0.0002f * (lastTimeGpsReceived_ms - secondLastGpsTime_ms),0.0f,1.0f);
             gpsSpdAccuracy *= (1.0f - alpha);
             float gpsSpdAccRaw;
-            if (!gps.speed_accuracy(gpsSpdAccRaw)) {
+            if (!_ahrs->get_gps().speed_accuracy(gpsSpdAccRaw)) {
                 gpsSpdAccuracy = 0.0f;
             } else {
                 gpsSpdAccuracy = MAX(gpsSpdAccuracy,gpsSpdAccRaw);
@@ -513,7 +499,7 @@ void NavEKF3_core::readGpsData()
             }
             gpsPosAccuracy *= (1.0f - alpha);
             float gpsPosAccRaw;
-            if (!gps.horizontal_accuracy(gpsPosAccRaw)) {
+            if (!_ahrs->get_gps().horizontal_accuracy(gpsPosAccRaw)) {
                 gpsPosAccuracy = 0.0f;
             } else {
                 gpsPosAccuracy = MAX(gpsPosAccuracy,gpsPosAccRaw);
@@ -521,7 +507,7 @@ void NavEKF3_core::readGpsData()
             }
             gpsHgtAccuracy *= (1.0f - alpha);
             float gpsHgtAccRaw;
-            if (!gps.vertical_accuracy(gpsHgtAccRaw)) {
+            if (!_ahrs->get_gps().vertical_accuracy(gpsHgtAccRaw)) {
                 gpsHgtAccuracy = 0.0f;
             } else {
                 gpsHgtAccuracy = MAX(gpsHgtAccuracy,gpsHgtAccRaw);
@@ -529,16 +515,16 @@ void NavEKF3_core::readGpsData()
             }
 
             // check if we have enough GPS satellites and increase the gps noise scaler if we don't
-            if (gps.num_sats() >= 6 && (PV_AidingMode == AID_ABSOLUTE)) {
+            if (_ahrs->get_gps().num_sats() >= 6 && (PV_AidingMode == AID_ABSOLUTE)) {
                 gpsNoiseScaler = 1.0f;
-            } else if (gps.num_sats() == 5 && (PV_AidingMode == AID_ABSOLUTE)) {
+            } else if (_ahrs->get_gps().num_sats() == 5 && (PV_AidingMode == AID_ABSOLUTE)) {
                 gpsNoiseScaler = 1.4f;
             } else { // <= 4 satellites or in constant position mode
                 gpsNoiseScaler = 2.0f;
             }
 
             // Check if GPS can output vertical velocity, vertical velocity use is permitted and set GPS fusion mode accordingly
-            if (gps.have_vertical_velocity() && (frontend->_fusionModeGPS == 0) && !frontend->inhibitGpsVertVelUse) {
+            if (_ahrs->get_gps().have_vertical_velocity() && (frontend->_fusionModeGPS == 0) && !frontend->inhibitGpsVertVelUse) {
                 useGpsVertVel = true;
             } else {
                 useGpsVertVel = false;
@@ -556,7 +542,7 @@ void NavEKF3_core::readGpsData()
             calcGpsGoodForFlight();
 
             // Read the GPS location in WGS-84 lat,long,height coordinates
-            const struct Location &gpsloc = gps.location();
+            const struct Location &gpsloc = _ahrs->get_gps().location();
 
             // Set the EKF origin and magnetic field declination if not previously set  and GPS checks have passed
             if (gpsGoodToAlign && !validOrigin) {
@@ -595,7 +581,7 @@ void NavEKF3_core::readGpsData()
 // read the delta angle and corresponding time interval from the IMU
 // return false if data is not available
 bool NavEKF3_core::readDeltaAngle(uint8_t ins_index, Vector3f &dAng) {
-    const AP_InertialSensor &ins = AP::ins();
+    const AP_InertialSensor &ins = _ahrs->get_ins();
 
     if (ins_index < ins.get_gyro_count()) {
         ins.get_delta_angle(ins_index,dAng);
@@ -615,11 +601,10 @@ void NavEKF3_core::readBaroData()
 {
     // check to see if baro measurement has changed so we know if a new measurement has arrived
     // limit update rate to avoid overflowing the FIFO buffer
-    const AP_Baro &baro = AP::baro();
-    if (baro.get_last_update() - lastBaroReceived_ms > frontend->sensorIntervalMin_ms) {
+    if (frontend->_baro.get_last_update() - lastBaroReceived_ms > frontend->sensorIntervalMin_ms) {
         frontend->logging.log_baro = true;
 
-        baroDataNew.hgt = baro.get_altitude();
+        baroDataNew.hgt = frontend->_baro.get_altitude();
 
         // If we are in takeoff mode, the height measurement is limited to be no less than the measurement at start of takeoff
         // This prevents negative baro disturbances due to copter downwash corrupting the EKF altitude during initial ascent
@@ -628,7 +613,7 @@ void NavEKF3_core::readBaroData()
         }
 
         // time stamp used to check for new measurement
-        lastBaroReceived_ms = baro.get_last_update();
+        lastBaroReceived_ms = frontend->_baro.get_last_update();
 
         // estimate of time height measurement was taken, allowing for delays
         baroDataNew.time_ms = lastBaroReceived_ms - frontend->_hgtDelay_ms;
@@ -676,7 +661,7 @@ void NavEKF3_core::correctEkfOriginHeight()
 
     // calculate the observation variance assuming EKF error relative to datum is independent of GPS observation error
     // when not using GPS as height source
-    float originHgtObsVar = sq(gpsHgtAccuracy) + P[9][9];
+    float originHgtObsVar = sq(gpsHgtAccuracy) + P[8][8];
 
     // calculate the correction gain
     float gain = ekfOriginHgtVar / (ekfOriginHgtVar + originHgtObsVar);
@@ -792,9 +777,9 @@ void NavEKF3_core::readRngBcnData()
     // Check if the range beacon data can be used to align the vehicle position
     if (imuSampleTime_ms - rngBcnLast3DmeasTime_ms < 250 && beaconVehiclePosErr < 1.0f && rngBcnAlignmentCompleted) {
         // check for consistency between the position reported by the beacon and the position from the 3-State alignment filter
-        const float posDiffSq = sq(receiverPos.x - beaconVehiclePosNED.x) + sq(receiverPos.y - beaconVehiclePosNED.y);
-        const float posDiffVar = sq(beaconVehiclePosErr) + receiverPosCov[0][0] + receiverPosCov[1][1];
-        if (posDiffSq < 9.0f * posDiffVar) {
+        float posDiffSq = sq(receiverPos.x - beaconVehiclePosNED.x) + sq(receiverPos.y - beaconVehiclePosNED.y);
+        float posDiffVar = sq(beaconVehiclePosErr) + receiverPosCov[0][0] + receiverPosCov[1][1];
+        if (posDiffSq < 9.0f*posDiffVar) {
             rngBcnGoodToAlign = true;
             // Set the EKF origin and magnetic field declination if not previously set
             if (!validOrigin && PV_AidingMode != AID_ABSOLUTE) {
@@ -824,7 +809,7 @@ void NavEKF3_core::readRngBcnData()
     }
 
     // Check the buffer for measurements that have been overtaken by the fusion time horizon and need to be fused
-    rngBcnDataToFuse = storedRangeBeacon.recall(rngBcnDataDelayed, imuDataDelayed.time_ms);
+    rngBcnDataToFuse = storedRangeBeacon.recall(rngBcnDataDelayed,imuDataDelayed.time_ms);
 
     // Correct the range beacon earth frame origin for estimated offset relative to the EKF earth frame origin
     if (rngBcnDataToFuse) {

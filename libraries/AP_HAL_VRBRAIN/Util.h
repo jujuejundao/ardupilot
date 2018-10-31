@@ -4,7 +4,7 @@
 #include "AP_HAL_VRBRAIN_Namespace.h"
 #include "Semaphores.h"
 
-class VRBRAIN::NSHShellStream : public AP_HAL::BetterStream {
+class VRBRAIN::NSHShellStream : public AP_HAL::Stream {
 public:
     size_t write(uint8_t);
     size_t write(const uint8_t *buffer, size_t size);
@@ -29,10 +29,15 @@ private:
 
 class VRBRAIN::VRBRAINUtil : public AP_HAL::Util {
 public:
-    VRBRAINUtil(void);
+	VRBRAINUtil(void);
     bool run_debug_shell(AP_HAL::BetterStream *stream);
 
     enum safety_state safety_switch_state(void);
+
+    /*
+      set system clock in UTC microseconds
+     */
+    void set_system_clock(uint64_t time_utc_usec);
 
     /*
       get system identifier (STM32 serial number)
@@ -44,19 +49,18 @@ public:
     /*
       return a stream for access to nsh shell
      */
-    AP_HAL::BetterStream *get_shell_stream() { return &_shell_stream; }
+    AP_HAL::Stream *get_shell_stream() { return &_shell_stream; }
     perf_counter_t perf_alloc(perf_counter_type t, const char *name) override;
     void perf_begin(perf_counter_t ) override;
     void perf_end(perf_counter_t) override;
     void perf_count(perf_counter_t) override;
     
+    // create a new semaphore
+    AP_HAL::Semaphore *new_semaphore(void) override { return new VRBRAIN::Semaphore; }
+
     void set_imu_temp(float current) override;
     void set_imu_target_temp(int8_t *target) override;
-
-    // allocate and free DMA-capable memory if possible. Otherwise return normal memory
-    void *malloc_type(size_t size, AP_HAL::Util::Memory_Type mem_type) override;
-    void free_type(void *ptr, size_t size, AP_HAL::Util::Memory_Type mem_type) override;
-
+    
 private:
     int _safety_handle;
     VRBRAIN::NSHShellStream _shell_stream;

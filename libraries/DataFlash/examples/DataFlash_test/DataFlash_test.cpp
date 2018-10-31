@@ -11,6 +11,7 @@
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
 #define LOG_TEST_MSG 1
+
 struct PACKED log_Test {
     LOG_PACKET_HEADER;
     uint16_t v1, v2, v3, v4;
@@ -20,12 +21,7 @@ struct PACKED log_Test {
 static const struct LogStructure log_structure[] = {
     LOG_COMMON_STRUCTURES,
     { LOG_TEST_MSG, sizeof(log_Test),       
-      "TEST",
-      "HHHHii",
-      "V1,V2,V3,V4,L1,L2",
-      "------",
-      "------"
-    }
+    "TEST", "HHHHii",        "V1,V2,V3,V4,L1,L2" }
 };
 
 #define NUM_PACKETS 500
@@ -40,8 +36,8 @@ public:
 private:
 
     AP_Int32 log_bitmask;
-    DataFlash_Class dataflash{log_bitmask};
-
+    DataFlash_Class dataflash{"DF Test 0.1", log_bitmask};
+    void print_mode(AP_HAL::BetterStream *port, uint8_t mode);
 };
 
 static DataFlashTest dataflashtest;
@@ -57,11 +53,14 @@ void DataFlashTest::setup(void)
 
     // Test
     hal.scheduler->delay(20);
+    dataflash.ShowDeviceInfo(hal.console);
 
     // We start to write some info (sequentialy) starting from page 1
     // This is similar to what we will do...
     log_num = dataflash.find_last_log();
     hal.console->printf("Using log number %u\n", log_num);
+    hal.console->printf("After testing perform erase before using DataFlash for logging!\n");
+    hal.console->printf("\n");
     hal.console->printf("Writing to flash... wait...\n");
 
     uint32_t total_micros = 0;
@@ -97,8 +96,21 @@ void DataFlashTest::setup(void)
 
 void DataFlashTest::loop(void)
 {
-    hal.console->printf("\nTest complete.\n");
+    uint16_t start, end;
+
+    hal.console->printf("Start read of log %u\n", log_num);
+
+    dataflash.get_log_boundaries(log_num, start, end); 
+    dataflash.LogReadProcess(log_num, start, end, 
+                             FUNCTOR_BIND_MEMBER(&DataFlashTest::print_mode, void, AP_HAL::BetterStream *, uint8_t),//print_mode,
+                             hal.console);
+    hal.console->printf("\nTest complete.  Test will repeat in 20 seconds\n");
     hal.scheduler->delay(20000);
+}
+
+void DataFlashTest::print_mode(AP_HAL::BetterStream *port, uint8_t mode)
+{
+    port->printf("Mode(%u)", (unsigned)mode);
 }
 
 /*
@@ -111,6 +123,7 @@ void setup()
 {
     dataflashtest.setup();
 }
+
 
 void loop()
 {

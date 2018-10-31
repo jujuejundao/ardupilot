@@ -12,7 +12,7 @@ const AP_Param::GroupInfo AP_L1_Control::var_info[] = {
     // @Range: 1 60
     // @Increment: 1
     // @User: Standard
-    AP_GROUPINFO("PERIOD",    0, AP_L1_Control, _L1_period, 17),
+    AP_GROUPINFO("PERIOD",    0, AP_L1_Control, _L1_period, 20),
 
     // @Param: DAMPING
     // @DisplayName: L1 control damping ratio
@@ -195,7 +195,7 @@ void AP_L1_Control::_prevent_indecision(float &Nu)
 }
 
 // update L1 control for waypoint navigation
-void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct Location &next_WP, float dist_min)
+void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct Location &next_WP)
 {
 
     struct Location _current_loc;
@@ -207,7 +207,6 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
     float dt = (now - _last_update_waypoint_us) * 1.0e-6f;
     if (dt > 0.1) {
         dt = 0.1;
-        _L1_xtrack_i = 0.0f;
     }
     _last_update_waypoint_us = now;
 
@@ -238,7 +237,7 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
     // Calculate time varying control parameters
     // Calculate the L1 length required for specified period
     // 0.3183099 = 1/1/pipi
-    _L1_dist = MAX(0.3183099f * _L1_damping * _L1_period * groundSpeed, dist_min);
+    _L1_dist = 0.3183099f * _L1_damping * _L1_period * groundSpeed;
 
     // Calculate the NE position of WP B relative to WP A
     Vector2f AB = location_diff(prev_WP, next_WP);
@@ -317,7 +316,7 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
     _prevent_indecision(Nu);
     _last_Nu = Nu;
 
-    //Limit Nu to +-(pi/2)
+    //Limit Nu to +-pi
     Nu = constrain_float(Nu, -1.5708f, +1.5708f);
     _latAccDem = K_L1 * groundSpeed * groundSpeed / _L1_dist * sinf(Nu);
 

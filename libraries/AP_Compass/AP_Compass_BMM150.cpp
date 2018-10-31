@@ -63,12 +63,13 @@
 
 extern const AP_HAL::HAL &hal;
 
-AP_Compass_Backend *AP_Compass_BMM150::probe(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev)
+AP_Compass_Backend *AP_Compass_BMM150::probe(Compass &compass,
+                                             AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev)
 {
     if (!dev) {
         return nullptr;
     }
-    AP_Compass_BMM150 *sensor = new AP_Compass_BMM150(std::move(dev));
+    AP_Compass_BMM150 *sensor = new AP_Compass_BMM150(compass, std::move(dev));
     if (!sensor || !sensor->init()) {
         delete sensor;
         return nullptr;
@@ -77,8 +78,10 @@ AP_Compass_Backend *AP_Compass_BMM150::probe(AP_HAL::OwnPtr<AP_HAL::I2CDevice> d
     return sensor;
 }
 
-AP_Compass_BMM150::AP_Compass_BMM150(AP_HAL::OwnPtr<AP_HAL::Device> dev)
-    : _dev(std::move(dev))
+AP_Compass_BMM150::AP_Compass_BMM150(Compass &compass,
+                                     AP_HAL::OwnPtr<AP_HAL::Device> dev)
+    : AP_Compass_Backend(compass)
+    , _dev(std::move(dev))
 {
 }
 
@@ -314,14 +317,47 @@ void AP_Compass_BMM150::_update()
     /* convert uT to milligauss */
     raw_field *= 10;
 
-    _last_read_ms = AP_HAL::millis();
+    /* rotate raw_field from sensor frame to body frame */
+    rotate_field(raw_field, _compass_instance);
 
-    accumulate_sample(raw_field, _compass_instance);
+    /* publish raw_field (uncorrected point sample) for calibration use */
+    publish_raw_field(raw_field, _compass_instance);
+
+    /* correct raw_field for known errors */
+    correct_field(raw_field, _compass_instance);
+
+    _last_read_ms = AP_HAL::millis();
+    
+    if (!_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+        return;
+    }
+    _mag_accum += raw_field;
+    _accum_count++;
+    if (_accum_count == 10) {
+        _mag_accum /= 2;
+        _accum_count = 5;
+    }
+    _sem->give();
+
     _dev->check_next_register();
 }
 
 void AP_Compass_BMM150::read()
 {
-    drain_accumulated_samples(_compass_instance);
+    if (!_sem->take_nonblocking()) {
+        return;
+    }
+    if (_accum_count == 0) {
+        _sem->give();
+        return;
+    }
+
+    Vector3f field(_mag_accum);
+    field /= _accum_count;
+    _mag_accum.zero();
+    _accum_count = 0;
+    _sem->give();
+
+    publish_filtered_field(field, _compass_instance);
 }
 

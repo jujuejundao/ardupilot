@@ -39,7 +39,7 @@ static const struct {
     uint8_t pin;
     float scaling;
 } pin_scaling[] = {
-#if defined(CONFIG_ARCH_BOARD_VRBRAIN_V45) || defined(CONFIG_ARCH_BOARD_VRBRAIN_V51) || defined(CONFIG_ARCH_BOARD_VRBRAIN_V52) || defined(CONFIG_ARCH_BOARD_VRBRAIN_V52E) || defined(CONFIG_ARCH_BOARD_VRCORE_V10) || defined(CONFIG_ARCH_BOARD_VRBRAIN_V54)
+#if defined(CONFIG_ARCH_BOARD_VRBRAIN_V45) || defined(CONFIG_ARCH_BOARD_VRBRAIN_V51) || defined(CONFIG_ARCH_BOARD_VRBRAIN_V52) || defined(CONFIG_ARCH_BOARD_VRCORE_V10) || defined(CONFIG_ARCH_BOARD_VRBRAIN_V54)
     { 10, 3.3f/4096 },
     { 11, 3.3f/4096 },
 #elif defined(CONFIG_ARCH_BOARD_VRUBRAIN_V51)
@@ -52,7 +52,6 @@ static const struct {
 #else
 #error "Unknown board type for AnalogIn scaling"
 #endif
-    { 0, 0.f          },
 };
 
 using namespace VRBRAIN;
@@ -68,6 +67,11 @@ VRBRAINAnalogSource::VRBRAINAnalogSource(int16_t pin, float initial_value) :
     _sum_value(0),
     _sum_ratiometric(0)
 {
+
+
+
+
+
 }
 
 void VRBRAINAnalogSource::set_stop_pin(uint8_t p)
@@ -77,17 +81,16 @@ void VRBRAINAnalogSource::set_stop_pin(uint8_t p)
 
 float VRBRAINAnalogSource::read_average()
 {
-    WITH_SEMAPHORE(_semaphore);
-
     if (_sum_count == 0) {
         return _value;
     }
+    hal.scheduler->suspend_timer_procs();
     _value = _sum_value / _sum_count;
     _value_ratiometric = _sum_ratiometric / _sum_count;
     _sum_value = 0;
     _sum_ratiometric = 0;
     _sum_count = 0;
-
+    hal.scheduler->resume_timer_procs();
     return _value;
 }
 
@@ -143,9 +146,7 @@ void VRBRAINAnalogSource::set_pin(uint8_t pin)
     if (_pin == pin) {
         return;
     }
-
-    WITH_SEMAPHORE(_semaphore);
-
+    hal.scheduler->suspend_timer_procs();
     _pin = pin;
     _sum_value = 0;
     _sum_ratiometric = 0;
@@ -153,6 +154,7 @@ void VRBRAINAnalogSource::set_pin(uint8_t pin)
     _latest_value = 0;
     _value = 0;
     _value_ratiometric = 0;
+    hal.scheduler->resume_timer_procs();
 }
 
 /*
@@ -160,8 +162,6 @@ void VRBRAINAnalogSource::set_pin(uint8_t pin)
  */
 void VRBRAINAnalogSource::_add_value(float v, float vcc5V)
 {
-    WITH_SEMAPHORE(_semaphore);
-
     _latest_value = v;
     _sum_value += v;
     if (vcc5V < 3.0f) {
@@ -237,11 +237,6 @@ void VRBRAINAnalogIn::next_stop_pin(void)
  */
 void VRBRAINAnalogIn::_timer_tick(void)
 {
-    if (_adc_fd == -1) {
-        // not initialised yet
-        return;
-    }
-
     // read adc at 100Hz
     uint32_t now = AP_HAL::micros();
     uint32_t delta_t = now - _last_run;

@@ -7,15 +7,11 @@
 
 class AP_SteerController {
 public:
-    AP_SteerController(AP_AHRS &ahrs)
-        : _ahrs(ahrs)
-    {
-        AP_Param::setup_object_defaults(this, var_info);
-    }
-
-    /* Do not allow copies */
-    AP_SteerController(const AP_SteerController &other) = delete;
-    AP_SteerController &operator=(const AP_SteerController&) = delete;
+	AP_SteerController(AP_AHRS &ahrs) :
+        _ahrs(ahrs)
+    { 
+		AP_Param::setup_object_defaults(this, var_info);
+	}
 
     /*
       return a steering servo output from -4500 to 4500 given a
@@ -53,7 +49,7 @@ public:
     }
 
 private:
-    AP_Float _tau;
+	AP_Float _tau;
 	AP_Float _K_FF;
 	AP_Float _K_P;
 	AP_Float _K_I;

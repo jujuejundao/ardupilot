@@ -63,7 +63,7 @@ const AP_Param::Info ReplayVehicle::var_info[] = {
 
     // @Group: ARSPD_
     // @Path: ../libraries/AP_Airspeed/AP_Airspeed.cpp
-    GOBJECT(airspeed,                               "ARSP_",   AP_Airspeed),
+    GOBJECT(airspeed,                               "ARSPD_",   AP_Airspeed),
 
     // @Group: EK2_
     // @Path: ../libraries/AP_NavEKF2/AP_NavEKF2.cpp
@@ -100,16 +100,22 @@ void ReplayVehicle::load_parameters(void)
     AP_Param::set_default_by_name("LOG_FILE_BUFSIZE", 60);
 }
 
+static const struct LogStructure min_log_structure[] = {
+    { LOG_FORMAT_MSG, sizeof(log_Format),
+      "FMT", "BBnNZ",      "Type,Length,Name,Format,Columns" },
+    { LOG_PARAMETER_MSG, sizeof(log_Parameter),
+      "PARM", "QNf",        "TimeUS,Name,Value" }, 
+    { LOG_MESSAGE_MSG, sizeof(log_Message),
+      "MSG",  "QZ",     "TimeUS,Message"},
+};
+
 void ReplayVehicle::setup(void) 
 {
     load_parameters();
-
-    // we pass an empty log structure, filling the structure in with
-    // either the format present in the log (if we do not emit the
-    // message as a product of Replay), or the format understood in
-    // the current code (if we do emit the message in the normal
-    // places in the EKF, for example)
-    dataflash.Init(log_structure, 0);
+    
+    // we pass a minimal log structure, as we will be outputting the
+    // log structures we need manually, to prevent FMT duplicates
+    dataflash.Init(min_log_structure, ARRAY_SIZE(min_log_structure));
 
     ahrs.set_compass(&compass);
     ahrs.set_fly_forward(true);
@@ -150,7 +156,6 @@ void Replay::usage(void)
     ::printf("\t--logmatch         match logging rate to source\n");
     ::printf("\t--no-params        don't use parameters from the log\n");
     ::printf("\t--no-fpe           do not generate floating point exceptions\n");
-    ::printf("\t--packet-counts    print packet counts at end of processing\n");
 }
 
 
@@ -166,7 +171,6 @@ enum {
     OPT_NOPARAMS,
     OPT_PARAM_FILE,
     OPT_NO_FPE,
-    OPT_PACKET_COUNTS,
 };
 
 void Replay::flush_dataflash(void) {
@@ -223,11 +227,10 @@ void Replay::_parse_command_line(uint8_t argc, char * const argv[])
         {"logmatch",        false,  0, OPT_LOGMATCH},
         {"no-params",       false,  0, OPT_NOPARAMS},
         {"no-fpe",          false,  0, OPT_NO_FPE},
-        {"packet-counts",   false,  0, OPT_PACKET_COUNTS},
         {0, false, 0, 0}
     };
 
-    GetOptLong gopt(argc, argv, "r:p:ha:g:A:n", options);
+    GetOptLong gopt(argc, argv, "r:p:ha:g:A:", options);
 
     int opt;
     while ((opt = gopt.getoption()) != -1) {
@@ -305,10 +308,6 @@ void Replay::_parse_command_line(uint8_t argc, char * const argv[])
             
         case OPT_NO_FPE:
             generate_fpe = false;
-            break;
-
-        case OPT_PACKET_COUNTS:
-            packet_counts = true;
             break;
 
         case 'h':
@@ -533,7 +532,6 @@ void Replay::setup()
     _vehicle.setup();
 
     inhibit_gyro_cal();
-    force_log_disarmed();
 
     if (log_info.update_rate == 400) {
         // assume copter for 400Hz
@@ -553,16 +551,17 @@ void Replay::set_ins_update_rate(uint16_t _update_rate) {
 }
 
 void Replay::inhibit_gyro_cal() {
-    if (!logreader.set_parameter("INS_GYR_CAL", AP_InertialSensor::GYRO_CAL_NEVER)) {
-        ::fprintf(stderr, "Failed to set GYR_CAL parameter\n");
+    // swiped from LR_MsgHandler.cpp; until we see PARM messages, we
+    // don't have a PARM handler available to set parameters.
+    enum ap_var_type var_type;
+    AP_Param *vp = AP_Param::find("INS_GYR_CAL", &var_type);
+    if (vp == NULL) {
+        ::fprintf(stderr, "No GYR_CAL parameter found\n");
         abort();
     }
-}
-void Replay::force_log_disarmed() {
-    if (!logreader.set_parameter("LOG_DISARMED", 1)) {
-        ::fprintf(stderr, "Failed to set LOG_DISARMED parameter\n");
-        abort();
-    }
+    ((AP_Float *)vp)->set(AP_InertialSensor::GYRO_CAL_NEVER);
+
+    // logreader.set_parameter("GYR_CAL", AP_InertialSensor::GYRO_CAL_NEVER);
 }
 
 /*
@@ -626,10 +625,15 @@ void Replay::write_ekf_logs(void)
 
 void Replay::read_sensors(const char *type)
 {
-    if (streq(type, "PARM")) {
+    if (!done_parameters && !streq(type,"FMT") && !streq(type,"PARM")) {
+        done_parameters = true;
         set_user_parameters();
     }
 
+    if (done_parameters && streq(type, "PARM")) {
+        set_user_parameters();
+    }
+    
     if (!done_home_init) {
         if (streq(type, "GPS") &&
             (_vehicle.gps.status() >= AP_GPS::GPS_OK_FIX_3D) && done_baro_init) {
@@ -663,21 +667,13 @@ void Replay::read_sensors(const char *type)
         }
     } 
 
-    static bool ekf_force_started = false;
-    if (!ekf_force_started) {
-        if (log_info.have_imt2 ||
-            log_info.have_imt) {
-            _vehicle.ahrs.force_ekf_start();
-            ::fprintf(stderr, "EKF force-started at %u\n", AP_HAL::micros());
-            ekf_force_started = true;
-        }
-    }
-
     bool run_ahrs = false;
     if (log_info.have_imt2) {
         run_ahrs = streq(type, "IMT2");
+        _vehicle.ahrs.force_ekf_start();
     } else if (log_info.have_imt) {
         run_ahrs = streq(type, "IMT");
+        _vehicle.ahrs.force_ekf_start();
     } else if (log_info.have_imu2) {
         run_ahrs = streq(type, "IMU2");
     } else {
@@ -693,6 +689,9 @@ void Replay::read_sensors(const char *type)
     
     if (run_ahrs) {
         _vehicle.ahrs.update();
+        if (_vehicle.ahrs.get_home().lat != 0) {
+            _vehicle.inertial_nav.update(_vehicle.ins.get_delta_time());
+        }
         if ((downsample == 0 || ++output_counter % downsample == 0) && !logmatch) {
             write_ekf_logs();
         }
@@ -728,23 +727,21 @@ void Replay::log_check_generate(void)
     _vehicle.EKF2.getVelNED(-1,velocity);
     _vehicle.EKF2.getLLH(loc);
 
-    _vehicle.dataflash.Log_Write(
-        "CHEK",
-        "TimeUS,Roll,Pitch,Yaw,Lat,Lng,Alt,VN,VE,VD",
-        "sdddDUmnnn",
-        "FBBBGGB000",
-        "QccCLLffff",
-        AP_HAL::micros64(),
-        (int16_t)(100*degrees(euler.x)), // roll angle (centi-deg, displayed as deg due to format string)
-        (int16_t)(100*degrees(euler.y)), // pitch angle (centi-deg, displayed as deg due to format string)
-        (uint16_t)wrap_360_cd(100*degrees(euler.z)), // yaw angle (centi-deg, displayed as deg due to format string)
-        loc.lat,
-        loc.lng,
-        loc.alt*0.01f,
-        velocity.x,
-        velocity.y,
-        velocity.z
-        );
+    struct log_Chek packet = {
+        LOG_PACKET_HEADER_INIT(LOG_CHEK_MSG),
+        time_us : AP_HAL::micros64(),
+        roll    : (int16_t)(100*degrees(euler.x)), // roll angle (centi-deg, displayed as deg due to format string)
+        pitch   : (int16_t)(100*degrees(euler.y)), // pitch angle (centi-deg, displayed as deg due to format string)
+        yaw     : (uint16_t)wrap_360_cd(100*degrees(euler.z)), // yaw angle (centi-deg, displayed as deg due to format string)
+        lat     : loc.lat,
+        lng     : loc.lng,
+        alt     : loc.alt*0.01f,
+        vnorth  : velocity.x,
+        veast   : velocity.y,
+        vdown   : velocity.z
+    };
+
+    _vehicle.dataflash.WriteBlock(&packet, sizeof(packet));
 }
 
 
@@ -783,28 +780,7 @@ void Replay::flush_and_exit()
         report_checks();
     }
 
-    if (packet_counts) {
-        show_packet_counts();
-    }
-
     exit(0);
-}
-
-void Replay::show_packet_counts()
-{
-    uint64_t counts[LOGREADER_MAX_FORMATS];
-    logreader.get_packet_counts(counts);
-    char format_type[5];
-    uint64_t total = 0;
-    for(uint16_t i=0;i<LOGREADER_MAX_FORMATS;i++) {
-        if (counts[i] != 0) {
-            logreader.format_type(i, format_type);
-            printf("%10ld %s\n", counts[i], format_type);
-            total += counts[i];
-        }
-    }
-
-    printf("%ld total\n", total);
 }
 
 void Replay::loop()
@@ -832,15 +808,12 @@ void Replay::loop()
     }
     last_timestamp = AP_HAL::micros64();
 
-    if (streq(type, "FMT")) {
-        if (!seen_non_fmt) {
-            return;
-        }
-    } else {
-        seen_non_fmt = true;
+    read_sensors(type);
+
+    if (!streq(type,"ATT")) {
+        return;
     }
 
-    read_sensors(type);
 }
 
 
@@ -960,10 +933,7 @@ const struct AP_Param::GroupInfo        GCS_MAVLINK::var_info[] = {
 GCS_Dummy _gcs;
 
 // dummy methods to avoid linking with these libraries
-AP_Camera *AP::camera() { return nullptr; }
 void AP_Camera::send_feedback(mavlink_channel_t) {}
-void AP_Camera::control(float, float, float, float, float, float) {}
-void AP_Camera::configure(float, float, float, float, float, float, float) {}
-bool AP_AdvancedFailsafe::gcs_terminate(bool should_terminate, const char *reason) { return false; }
+bool AP_AdvancedFailsafe::gcs_terminate(bool should_terminate) { return false; }
 
 AP_HAL_MAIN_CALLBACKS(&replay);
