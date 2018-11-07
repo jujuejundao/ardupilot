@@ -5,6 +5,7 @@ void Copter::userhook_init()
 {
     // put your initialisation code here
     // this will be called once at start-up
+    hal.uartE->begin(115200); //init the uart port
 }
 #endif
 
