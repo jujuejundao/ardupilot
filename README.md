@@ -1,3 +1,17 @@
+# The branch pzx_obstacle_avoidance enable the uav to bypass an obstacale automously
+
+# The UAV was installed mmWave radar Nanoradar SP25T
+
+
+
+
+
+
+
+
+
+
+
 # ArduPilot Project
 
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/ArduPilot/ardupilot?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
@@ -118,3 +132,5 @@ for reviewing patches on their specific area. See [CONTRIBUTING.md](.github/CONT
   - ***Administration***: ArduPilot Technical Community Manager
 - [Jacob Walser](https://github.com/jaxxzer)
   - ***Vehicle***: Sub
+  
+ 
